@@ -140,28 +140,79 @@ Restart, fix_modify, output, run start/stop, minimize info
 No information about this fix is written to :doc:`binary restart files
 <restart>`.
 
-The :doc:`fix_modify move <fix_modify>` option is supported by this
-fix.  Its syntax is as follows:
+This fix supports two :doc:`fix_modify <fix_modify>` keywords,
+specific to this fix.  The *group* keword can be used to assign
+triangles or lines to groups with an ID, simillar to how how particles
+are assinged to groups via the :doc:`group <group>` command.  The
+*move* keyword can be used to make a group of triangles or lines move
+in prescribed manners, similar to the :doc:`fix move <fix_move>`
+command.  Note that for *local* surfaces the same operations can be
+performed directly with the :doc:`group <group>` and :doc:`fix move
+<fix_move>` since individual triangles and lines are finite-sized
+particles distributed across processors.
+
+In the description that follows, *surfs* can mean triangles (3d) or
+line segments (2d).
 
 .. code-block:: LAMMPS
 
-   move mode args
+   fix_modify fix-ID keyword value keyword value ...
 
-* mode = *rotate* (other modes of surface motion will be added later)
+* fix-ID = ID of the fix to modify
+* one or more keyword/value pairs may be appended
+* keyword = *group* or *move*
 
   .. parsed-literal::
+       
+       *group* values = group-ID style args
+         group-ID = ID of the new group or existing group of surfs
+           new group = a new group is created with the listed surfs
+           existing group = additional surfs are added to the group
+         style = region or type or id or molecule
+         region arg = region-ID
+         type or id or molecule args = one of the following 3 formats
+           args = list of one or more surf types (1-Ntypes) or surf IDs or molecule IDs (depending on *style*\ )
+             any entry in list can be a sequence formatted as A:B or A:B:C where
+             A = starting index, B = ending index,
+             C = increment between indices, 1 if not specified
+           args = logical value
+             logical = "<" or "<=" or ">" or ">=" or "==" or "!="
+             value = surf type (1-Ntypes) or surf ID or molecule ID (depending on *style*\ )
+           args = logical value1 value2
+             logical = "<>"
+             value1,value2 = surf types or surf IDs or molecule IDs (depending on *style*\ )
+       *move* values = group-ID style args
+          group-ID = ID of the group of surfs to prescribe motion for
+          style = *linear* or *wiggle* or *rotate* or *transrot* or *variable*
+          *linear* args = Vx Vy Vz
+          *wiggle* args = Ax Ay Az period
+          *rotate* args = Px Py Pz Rx Ry Rz period
+          *transrot* args = Vx Vy Vz Px Py Pz Rx Ry Rz period
+          *variable* args = v_dx v_dy v_dz v_vx v_vy v_vz
 
-       *mode* args = Px Py Pz Rx Ry Rz period
-         Px,Py,Pz = origin point of axis of rotation (distance units)
-         Rx,Ry,Rz = axis of rotation vector
-         period = period of rotation (time units)
+See the :doc:`group <group>` doc page for a detailed explanation of
+the various group styles and their arguments.  Note that not all group
+styles decribed on the :doc:`group <group>` doc page are supported by
+this fix, only region, type, id, and molecule.
 
-As an example:
+Fpr the group region style, the cemter point of the surf (triangle or
+line) is used to determine whether the surf is in the region or not.
+
+NOTE: make this addition on center point to the group doc page as well?
+
+See the :doc:`fix move <fix_move>` doc page for a detailed explanation
+of the various move styles and their arguments.
+       
+Examples are as follows:
 
 .. code-block:: LAMMPS
 
    fix_modify 1 move rotate 0 0 0 0 0 1 25
 
+Note that the same fix_modify keyword can be used mulltiple times,
+e.g. to define multiple groups or to defined different prescribed
+motions to different groups of triangles/lines.
+         
 No global or per-atom quantities are stored by this fix for access by
 various :doc:`output commands <Howto_output>`.  No parameter of this
 fix can be used with the *start/stop* keywords of the :doc:`run <run>`

@@ -25,8 +25,6 @@ Syntax
        *dynamic/dof* value = *yes* or *no*
          yes/no = do or do not re-compute the number of degrees of freedom (DOF) contributing to the temperature
        *energy* value = *yes* or *no*
-       *move* values = args
-          for details, see the list below of fixes which support this keyword
        *press* value = compute ID that calculates a pressure
        *respa* value = *1* to *max respa level* or *0* (for outermost level)
        *temp* value = compute ID that calculates a temperature
@@ -45,10 +43,12 @@ Examples
 Description
 """""""""""
 
-Modify one or more parameters of a previously defined fix.  Only
-specific fix styles support specific parameters.  See the doc pages
-for individual fix commands for info on which ones support which
-fix_modify parameters.
+Modify one or more parameters of a previously defined fix.  Specific
+fix styles support specific parameters.  See the doc pages of an
+individual fix command for info on which fix_modify keywords it
+supports.  This doc page only describes fix_modify keywords which are
+supported by multiple fixes.  Additional keywords, specific to a
+single fix, are only described on that fix's doc page.
 
 The *temp* keyword is used to determine how a fix computes
 temperature.  The specified compute ID must have been previously
@@ -184,15 +184,6 @@ keyword (or compute, fix, property, or variable reference) and then it
 replaces the string for that specific keyword. The *colname* keyword can
 be used multiple times. If multiple *colname* settings refer to the same
 keyword, the last setting has precedence.
-
-----------
-
-The *move* keyword is currently supported by only this fix:
-
-* :doc:`fix surface/global <fix_surface_global>
-
-See its doc page for details of the *move* keyword syntax and its
-meaning.
 
 Restrictions
 """"""""""""
