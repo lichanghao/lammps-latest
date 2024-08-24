@@ -183,7 +183,8 @@ line segments (2d).
              value1,value2 = surf types or surf IDs or molecule IDs (depending on *style*\ )
        *move* values = group-ID style args
           group-ID = ID of the group of surfs to prescribe motion for
-          style = *linear* or *wiggle* or *rotate* or *transrot* or *variable*
+          style = *none* or *linear* or *wiggle* or *rotate* or *transrot* or *variable*
+          *none* args = none
           *linear* args = Vx Vy Vz
           *wiggle* args = Ax Ay Az period
           *rotate* args = Px Py Pz Rx Ry Rz period
@@ -195,7 +196,9 @@ the various group styles and their arguments.  Note that not all group
 styles decribed on the :doc:`group <group>` doc page are supported by
 this fix, only region, type, id, and molecule.
 
-Fpr the group region style, the cemter point of the surf (triangle or
+NOTE: explain that none applies to all groups
+
+Fpr the group region style, the center point of the surf (triangle or
 line) is used to determine whether the surf is in the region or not.
 
 NOTE: make this addition on center point to the group doc page as well?

@@ -826,63 +826,400 @@ void FixSurfaceGlobal::post_force(int vflag)
 }
 
 /* ----------------------------------------------------------------------
-   turn on/off surface motion via fix_modify
-   when motion is active, INTITIAL_INTEGRATE is set
+   process fix_modify commands specific to fix surface/global
+   when motion is active, set INTITIAL_INTEGRATE mask flag
 ------------------------------------------------------------------------- */
 
 int FixSurfaceGlobal::modify_param(int narg, char **arg)
 {
+  // group options
+  
+  if (strcmp(arg[0],"group") == 0) {
+    if (narg < 4) error->all(FLERR,"Illegal fix_modify command");
+
+    int igroup = find_group(arg[1]);
+    if (igroup < 0) igroup = add_group(arg[1]);
+    int bit = bitmask[igroup];
+
+    if (strcmp(arg[2],"region") == 0) {
+      if (narg != 4) error->all(FLERR,"Illegal fix_modify command");
+
+      auto region = domain->get_region_by_id(arg[3]);
+      if (!region) error->all(FLERR,"Region {} for fix_modify group region does not exist", arg[3]);
+      region->init();
+      region->prematch();
+
+      // need to generate center pt
+      // lines and tris
+      
+      for (i = 0; i < nsurf; i++)
+        if (region->match(x[i][0],x[i][1],x[i][2]))
+          gmask[i] |= bit;
+
+    } else if (strcmp(arg[2],"type") == 0 ||
+               strcmp(arg[2],"id") == 0 ||
+               strcmp(arg[2],"molecule") == 0) {
+
+      
+      int category=NONE;
+      if (strcmp(arg[1],"type") == 0) category = TYPE;
+      else if (strcmp(arg[1],"molecule") == 0) category = MOLECULE;
+      else if (strcmp(arg[1],"id") == 0) category = ID;
+      
+      if ((category == MOLECULE) && (!atom->molecule_flag))
+        error->all(FLERR,"Group molecule command requires atom attribute molecule");
+      
+      if ((category == ID) && (!atom->tag_enable))
+        error->all(FLERR,"Group id command requires atom IDs");
+
+      // args = logical condition
+
+      if (narg > 3 &&
+          (strcmp(arg[2],"<") == 0 || strcmp(arg[2],">") == 0 ||
+           strcmp(arg[2],"<=") == 0 || strcmp(arg[2],">=") == 0 ||
+           strcmp(arg[2],"==") == 0 || strcmp(arg[2],"!=") == 0 ||
+           strcmp(arg[2],"<>") == 0)) {
+
+        int condition = -1;
+        if (strcmp(arg[2],"<") == 0) condition = LT;
+        else if (strcmp(arg[2],"<=") == 0) condition = LE;
+        else if (strcmp(arg[2],">") == 0) condition = GT;
+        else if (strcmp(arg[2],">=") == 0) condition = GE;
+        else if (strcmp(arg[2],"==") == 0) condition = EQ;
+        else if (strcmp(arg[2],"!=") == 0) condition = NEQ;
+        else if (strcmp(arg[2],"<>") == 0) condition = BETWEEN;
+        else error->all(FLERR,"Illegal group command");
+
+        tagint bound1,bound2;
+        if (category == TYPE)
+          bound1 = (tagint) utils::expand_type_int(FLERR, arg[3], Atom::ATOM, lmp);
+        else bound1 = utils::tnumeric(FLERR, arg[3], false, lmp);
+        bound2 = -1;
+
+        if (condition == BETWEEN) {
+          if (narg != 5) error->all(FLERR,"Illegal group command");
+          if (category == TYPE)
+            bound2 = (tagint) utils::expand_type_int(FLERR, arg[4], Atom::ATOM, lmp);
+          else bound2 = utils::tnumeric(FLERR, arg[4], false, lmp);
+        } else if (narg != 4) error->all(FLERR,"Illegal group command");
+
+        int *attribute = nullptr;
+        tagint *tattribute = nullptr;
+        if (category == TYPE) attribute = atom->type;
+        else if (category == MOLECULE) tattribute = atom->molecule;
+        else if (category == ID) tattribute = atom->tag;
+
+        // add to group if meets condition
+
+        if (attribute) {
+          if (condition == LT) {
+            for (i = 0; i < nlocal; i++)
+              if (attribute[i] < bound1) mask[i] |= bit;
+          } else if (condition == LE) {
+            for (i = 0; i < nlocal; i++)
+              if (attribute[i] <= bound1) mask[i] |= bit;
+          } else if (condition == GT) {
+            for (i = 0; i < nlocal; i++)
+              if (attribute[i] > bound1) mask[i] |= bit;
+          } else if (condition == GE) {
+            for (i = 0; i < nlocal; i++)
+              if (attribute[i] >= bound1) mask[i] |= bit;
+          } else if (condition == EQ) {
+            for (i = 0; i < nlocal; i++)
+              if (attribute[i] == bound1) mask[i] |= bit;
+          } else if (condition == NEQ) {
+            for (i = 0; i < nlocal; i++)
+              if (attribute[i] != bound1) mask[i] |= bit;
+          } else if (condition == BETWEEN) {
+            for (i = 0; i < nlocal; i++)
+              if (attribute[i] >= bound1 && attribute[i] <= bound2)
+                mask[i] |= bit;
+          }
+        } else {
+          if (condition == LT) {
+            for (i = 0; i < nlocal; i++)
+              if (tattribute[i] < bound1) mask[i] |= bit;
+          } else if (condition == LE) {
+            for (i = 0; i < nlocal; i++)
+              if (tattribute[i] <= bound1) mask[i] |= bit;
+          } else if (condition == GT) {
+            for (i = 0; i < nlocal; i++)
+              if (tattribute[i] > bound1) mask[i] |= bit;
+          } else if (condition == GE) {
+            for (i = 0; i < nlocal; i++)
+              if (tattribute[i] >= bound1) mask[i] |= bit;
+          } else if (condition == EQ) {
+            for (i = 0; i < nlocal; i++)
+              if (tattribute[i] == bound1) mask[i] |= bit;
+          } else if (condition == NEQ) {
+            for (i = 0; i < nlocal; i++)
+              if (tattribute[i] != bound1) mask[i] |= bit;
+          } else if (condition == BETWEEN) {
+            for (i = 0; i < nlocal; i++)
+              if (tattribute[i] >= bound1 && tattribute[i] <= bound2)
+                mask[i] |= bit;
+          }
+        }
+
+      // args = list of values
+
+      } else {
+        int *attribute = nullptr;
+        tagint *tattribute = nullptr;
+        if (category == TYPE) attribute = atom->type;
+        else if (category == MOLECULE) tattribute = atom->molecule;
+        else if (category == ID) tattribute = atom->tag;
+
+        char *typestr = nullptr;
+        tagint start,stop,delta;
+
+        for (int iarg = 2; iarg < narg; iarg++) {
+          delta = 1;
+          if (category == TYPE) {
+            delete[] typestr;
+            typestr = utils::expand_type(FLERR, arg[iarg], Atom::ATOM, lmp);
+            if (typestr) stop = start = utils::tnumeric(FLERR, typestr, false, lmp);
+          }
+          if (typestr == nullptr) {
+            try {
+              ValueTokenizer values(arg[iarg],":");
+              start = values.next_tagint();
+              if (utils::strmatch(arg[iarg],"^-?\\d+$")) {
+                stop = start;
+              } else if (utils::strmatch(arg[iarg],"^-?\\d+:-?\\d+$")) {
+                stop = values.next_tagint();
+              } else if (utils::strmatch(arg[iarg],"^-?\\d+:-?\\d+:\\d+$")) {
+                stop = values.next_tagint();
+                delta = values.next_tagint();
+              } else throw TokenizerException("Syntax error","");
+            } catch (TokenizerException &e) {
+              error->all(FLERR,"Incorrect range string '{}': {}",arg[iarg],e.what());
+            }
+            if (delta < 1)
+              error->all(FLERR,"Illegal range increment value");
+          }
+
+          // add to group if attribute matches value or sequence
+
+          if (attribute) {
+            for (i = 0; i < nlocal; i++)
+              if (attribute[i] >= start && attribute[i] <= stop &&
+                  (attribute[i]-start) % delta == 0) mask[i] |= bit;
+          } else {
+            for (i = 0; i < nlocal; i++)
+              if (tattribute[i] >= start && tattribute[i] <= stop &&
+                  (tattribute[i]-start) % delta == 0) mask[i] |= bit;
+          }
+        }
+
+        delete[] typestr;
+      }
+    }
+  }
+
+  // motion options
+  
   if (strcmp(arg[0],"move") == 0) {
     if (narg < 2) error->all(FLERR,"Illegal fix_modify command");
+    
     int ifix = modify->find_fix(id);
 
     if (strcmp(arg[1],"none") == 0) {
-      mstyle = NONE;
+      nmotion = 0;
       modify->fmask[ifix] &= ~INITIAL_INTEGRATE;
       force_reneighbor = 0;
       next_reneighbor = -1;
+
+      // NOTE: this data exists for every motion instance ?
+      
       move_clear();
       return 2;
-
-    } else if (strcmp(arg[1],"rotate") == 0) {
-      if (narg < 9) error->all(FLERR,"Illegal fix_modify command");
-      mstyle = ROTATE;
-      modify->fmask[ifix] |= INITIAL_INTEGRATE;
-      force_reneighbor = 1;
-      next_reneighbor = -1;
-
-      rpoint[0] = xscale * utils::numeric(FLERR,arg[2],false,lmp);
-      rpoint[1] = yscale * utils::numeric(FLERR,arg[3],false,lmp);
-      rpoint[2] = zscale * utils::numeric(FLERR,arg[4],false,lmp);
-      raxis[0] = utils::numeric(FLERR,arg[5],false,lmp);
-      raxis[1] = utils::numeric(FLERR,arg[6],false,lmp);
-      raxis[2] = utils::numeric(FLERR,arg[7],false,lmp);
-      rperiod = utils::numeric(FLERR,arg[8],false,lmp);
-      if (rperiod <= 0.0) error->all(FLERR,"Illegal fix_modify command");
-
-      if (dimension == 2)
-        if (mstyle == ROTATE && (raxis[0] != 0.0 || raxis[1] != 0.0))
-          error->all(FLERR,"Fix_modify cannot rotate around "
-                     "non z-axis for 2d problem");
-
-      time_origin = update->ntimestep;
-      omega_rotate = MY_2PI / rperiod;
-
-      // runit = unit vector along rotation axis
-
-      if (mstyle == ROTATE) {
-        double len = MathExtra::len3(raxis);
-        if (len == 0.0)
-          error->all(FLERR,"Zero length rotation vector with fix_modify");
-        MathExtra::normalize3(raxis,runit);
-      }
-
-      move_clear();
-      move_init();
-      return 9;
     }
+
+    // add a new motion operation
+
+    modify->fmask[ifix] |= INITIAL_INTEGRATE;
+
+    if (nmotion == maxmotion) {
+      maxmotion++;
+      motion = (Motion *)
+        memory=>srealloc(motion,maxmotion*sizeof(Motion),"fix_surface_global::motion");
+    }
+
+    int igroup = find_group(arg[1]);
+    if (igroup < 0) error->all(FLERR,"Fix surface/global move group does not exist");
+    motions[nmotion].igroup = igroup;
+    
+    int argcount = add_motion(&motions[nmotion],narg-2,&arg[2]);
+    nmotion++;
+    
+    force_reneighbor = 1;
+    next_reneighbor = -1;
+
+    return argcount + 2;
   }
+
+  // keyword not recognized
+    
   return 0;
+}
+
+/* ---------------------------------------------------------------------- */
+
+int FixSurfaceGlobal::add_motion(Motion *motion, int narg, char **arg)
+{
+  if (strcmp(arg[0],"linear") == 0) {
+    if (narg < 4) error->all(FLERR,"Illegal fix_modify move command");
+    motion->mstyle = LINEAR;
+    
+    if (strcmp(arg[1], "NULL") == 0) motion->vxflag = 0;
+    else {
+      motion->vxflag = 1;
+      motion->vx = utils::numeric(FLERR, arg[4], false, lmp);
+    }
+    if (strcmp(arg[2], "NULL") == 0) motion->vyflag = 0;
+    else {
+      motion->vyflag = 1;
+      motion->vy = utils::numeric(FLERR, arg[2], false, lmp);
+    }
+    if (strcmp(arg[3], "NULL") == 0) motion->vzflag = 0;
+    else {
+      motion->vzflag = 1;
+      motion->vz = utils::numeric(FLERR, arg[3], false, lmp);
+    }
+    
+    return 4;
+  }
+  
+  if (strcmp(arg[0],"wiggle") == 0) {
+    if (narg < 5) error->all(FLERR,"Illegal fix_modify move command");
+    motion->mstyle = WIGGLE;
+    
+    if (strcmp(arg[1], "NULL") == 0) motion->axflag = 0;
+    else {
+      motion->axflag = 1;
+      motion->ax = utils::numeric(FLERR, arg[4], false, lmp);
+    }
+    if (strcmp(arg[2], "NULL") == 0) motion->ayflag = 0;
+    else {
+      motion->ayflag = 1;
+      motion->ay = utils::numeric(FLERR, arg[2], false, lmp);
+    }
+    if (strcmp(arg[3], "NULL") == 0) motion->azflag = 0;
+    else {
+      motion->azflag = 1;
+      motion->az = utils::numeric(FLERR, arg[3], false, lmp);
+    }
+
+    motion->period = utils::numeric(FLERR, arg[7], false, lmp);
+    if (motion->period <= 0.0) error->all(FLERR, "Illegal fix_modify move command");
+
+    return 5;
+  }
+  
+  if (strcmp(arg[0],"rotate") == 0) {
+    if (narg < 8) error->all(FLERR,"Illegal fix_modify move command");
+    motion->mstyle = ROTATE;
+
+    motion->point[0] = xscale * utils::numeric(FLERR,arg[1],false,lmp);
+    motion->point[1] = yscale * utils::numeric(FLERR,arg[2],false,lmp);
+    motion->point[2] = zscale * utils::numeric(FLERR,arg[3],false,lmp);
+    
+    motion->axis[0] = utils::numeric(FLERR,arg[4],false,lmp);
+    motion->axis[1] = utils::numeric(FLERR,arg[5],false,lmp);
+    motion->axis[2] = utils::numeric(FLERR,arg[6],false,lmp); 
+    if (dimension == 2)
+      if (motion->mstyle == ROTATE && (motion->axis[0] != 0.0 || motion->axis[1] != 0.0))
+        error->all(FLERR,"Fix_modify move cannot rotate around "
+                   "non z-axis for 2d problem");
+   
+    motion->period = utils::numeric(FLERR,arg[7],false,lmp);
+    if (motion->period <= 0.0) error->all(FLERR,"Illegal fix_modify move command");
+    
+    motion->time_origin = update->ntimestep;
+    motion->omega_rotate = MY_2PI / motion->period;
+    
+    // runit = unit vector along rotation axis
+    
+    double len = MathExtra::len3(motion->axis);
+    if (len == 0.0)
+      error->all(FLERR,"Fix_modify move zero length rotation vector");
+    MathExtra::normalize3(motion->axis,motion->unit);
+
+    // NOTE: how do these 2 operations now work
+    
+    move_clear();
+    move_init();
+    
+    return 8;
+  }
+  
+  if (strcmp(arg[0],"transrot") == 0) {
+    if (narg < 11) error->all(FLERR,"Illegal fix_modify move command");
+    motion->mstyle = TRANSROT;
+
+    vxflag = vyflag = vzflag = 1;
+    vx = utils::numeric(FLERR, arg[1], false, lmp);
+    vy = utils::numeric(FLERR, arg[2], false, lmp);
+    vz = utils::numeric(FLERR, arg[3], false, lmp);
+
+    motion->point[0] = xscale * utils::numeric(FLERR,arg[4],false,lmp);
+    motion->point[1] = yscale * utils::numeric(FLERR,arg[5],false,lmp);
+    motion->point[2] = zscale * utils::numeric(FLERR,arg[6],false,lmp);
+    
+    motion->axis[0] = utils::numeric(FLERR,arg[7],false,lmp);
+    motion->axis[1] = utils::numeric(FLERR,arg[8],false,lmp);
+    motion->axis[2] = utils::numeric(FLERR,arg[9],false,lmp); 
+    if (dimension == 2)
+      if (motion->mstyle == ROTATE && (motion->axis[0] != 0.0 || motion->axis[1] != 0.0))
+        error->all(FLERR,"Fix_modify move cannot rotate around "
+                   "non z-axis for 2d problem");
+   
+    motion->period = utils::numeric(FLERR,arg[10],false,lmp);
+    if (motion->period <= 0.0) error->all(FLERR,"Illegal fix_modify move command");
+    
+    motion->time_origin = update->ntimestep;
+    motion->omega_rotate = MY_2PI / motion->period;
+    
+    // runit = unit vector along rotation axis
+    
+    double len = MathExtra::len3(motion->axis);
+    if (len == 0.0)
+      error->all(FLERR,"Fix_modify move zero length rotation vector");
+    MathExtra::normalize3(motion->axis,motion->unit);
+
+    // NOTE: how do these 2 operations now work
+    
+    move_clear();
+    move_init();
+    
+    return 11;
+  }
+      
+  if (strcmp(arg[0],"variable") == 0) {
+  }
+
+  error return;
+    
+  return iarg;
+}
+
+/* ---------------------------------------------------------------------- */
+
+int FixSurfaceGlobal::find_group(const char *name)
+{
+  for (int igroup = 0; igroup < MAX_GROUP; igroup++)
+    if (strcmp(gnames[igroup],name) return igroup;
+  return -1;
+}
+
+/* ---------------------------------------------------------------------- */
+
+int FixSurfaceGlobal::add_group(const char *name)
+{
+  for (int igroup = 0; igroup < MAX_GROUP; igroup++)
+    if (strcmp(gnames[igroup],name) return igroup;
+  return -1;
 }
 
 /* ---------------------------------------------------------------------- */

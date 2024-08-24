@@ -70,12 +70,26 @@ class FixSurfaceGlobal : public Fix {
 
   double **xsurf,**vsurf,**omegasurf,*radsurf;
 
-  // motion
+  double triggersq;
+  
+  // motion settings
 
-  int mstyle;
-  double rperiod,omega_rotate,time_origin,triggersq;
-  double xscale,yscale,zscale;
-  double rpoint[3],raxis[3],runit[3];
+  struct Motion {
+    int mstyle;
+    int vxflag,vyflag,vzflag;
+    int axflag,ayflag,azflag;
+    double vx,vy,vz;
+    double ax,ay,az;
+    double period;
+    double point[3],axis[3],unit[3];
+    double omega;
+    double time_origin;
+  };
+
+  struct Motion *motions;
+  int nmotion;
+  int maxmotion;
+
   double **points_original,**xsurf_original;
   double **points_lastneigh;
 
