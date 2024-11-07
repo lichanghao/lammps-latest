@@ -910,6 +910,7 @@ int FixSurfaceGlobal::modify_param(int narg, char **arg)
 
 int FixSurfaceGlobal::modify_params_group(int igroup, int bit, int narg, char **arg)
 {
+  /*
   if (strcmp(arg[0],"region") == 0) {
     if (narg < 2) error->all(FLERR,"Illegal fix_modify command");
     
@@ -1075,6 +1076,8 @@ int FixSurfaceGlobal::modify_params_group(int igroup, int bit, int narg, char **
     
     // return error
   }
+  
+  */
   
   return 0;
 }

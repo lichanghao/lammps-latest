@@ -31,18 +31,18 @@ which span a significant fraction of the simulation box size in one or
 more dimensions.
 
 The second is *local* which means that the collection of
-triangles/lines is distributed across processers the same what that
-particles are distributed.  Each processor is assigned to sub-domain
-of the simulation box and owns whichever triangles/lines have their
-center point in the processor's sub-domain.  Similar to particles,
-each processor may also own ghost copies of triangles/lines whose
-finite size overlaps with the processor's sub-domain.  The number of
-triangles/lines can now be very large.  For effective distribution and
-minimal communication all the triangles/lines should be small, no more
-than a few particle diameters in size.  If even one larger triangle or
-line is defined then the neighbor list cutoff and communication cutoff
-will be set correspondingly larger, which can slow down the
-simulation.
+triangles/lines is distributed across processers in the same manner
+that particles are distributed.  Each processor is assigned to
+sub-domain of the simulation box and owns whichever triangles/lines
+have their center point in the processor's sub-domain.  Similar to
+particles, each processor may also own ghost copies of triangles/lines
+whose finite size overlaps with the processor's sub-domain.  The
+number of triangles/lines can now be very large.  For effective
+distribution and minimal communication all the triangles/lines should
+be small, no more than a few particle diameters in size.  If even one
+larger triangle or line is defined then the neighbor list cutoff and
+communication cutoff will be set correspondingly larger, which can
+slow down the simulation.
 
 One of these two commands must be specified to use *global* or *local*
 surfaces in your granular simulation:
