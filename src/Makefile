@@ -125,6 +125,7 @@ PACKAGE = \
 	reaction \
 	reaxff \
 	replica \
+	rheo \
 	rigid \
 	scafacos \
 	shock \
@@ -235,6 +236,7 @@ PACKLIB = \
 	plumed \
 	qmmm \
 	ml-quip \
+	rheo \
 	scafacos \
 	machdyn \
 	vtk \
@@ -256,6 +258,7 @@ PACKEXT = \
 	netcdf \
 	plumed \
 	qmmm \
+	rheo \
 	scafacos \
 	voronoi \
 	vtk \
