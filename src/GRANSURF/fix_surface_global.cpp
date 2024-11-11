@@ -696,6 +696,8 @@ void FixSurfaceGlobal::post_force(int vflag)
       delz = xtmp - xsurf[j][2];
       rsq = delx * delx + dely * dely + delz * delz;
 
+      // skip contact check if particle/surf are too far apart
+      
       radsum = radi + rsurf[j];
       if (rsq > radsum * radsum) {
         if (use_history) {
@@ -706,7 +708,7 @@ void FixSurfaceGlobal::post_force(int vflag)
         continue;
       }
 
-      // contact computation for line or tri
+      // check for contact between particle and line/tri
 
       if (dimension == 2) {
 
@@ -717,7 +719,6 @@ void FixSurfaceGlobal::post_force(int vflag)
         //   contact = nearest point on line to sphere center
         //   dr = vector from contact pt to sphere center
         //   rsq = squared length of dr
-        // NOTE: different for line vs tri
 
         jflag = SurfExtra::
           overlap_sphere_line(x[i],radius[i],
@@ -750,7 +751,8 @@ void FixSurfaceGlobal::post_force(int vflag)
         continue;
       }
 
-      // append contact surf to list
+      // append surf to list of contacts
+      
     }
 
     // Reduce set of contacts
