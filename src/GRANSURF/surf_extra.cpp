@@ -12,14 +12,13 @@
    See the README file in the top-level LAMMPS directory.
 ------------------------------------------------------------------------- */
 
-#include "gran_surf_extra.h"
+#include "surf_extra.h"
 
-#include "atom.h"
 #include "math_extra.h"
 
 using namespace MathExtra;
 
-namespace GranSurfExtra {
+namespace SurfExtra {
 
 /* ----------------------------------------------------------------------
    compute nearest point between sphere I and line segment J
@@ -187,17 +186,17 @@ int overlap_sphere_tri(double *xsphere, double radius,
     osum = o12flag + o23flag + o31flag;
     if (osum == 1) {
       if (o12flag) {
-        lineflag = GranSurfExtra::nearest_point_line(xsphere,p1,p2,pt);
+        lineflag = SurfExtra::nearest_point_line(xsphere,p1,p2,pt);
         if (lineflag == 1) flag = -1;
         else if (lineflag == -1) flag = -4;
         else flag = -5;
       } else if (o23flag) {
-        lineflag = GranSurfExtra::nearest_point_line(xsphere,p2,p3,pt);
+        lineflag = SurfExtra::nearest_point_line(xsphere,p2,p3,pt);
         if (lineflag == 1) flag = -2;
         else if (lineflag == -1) flag = -5;
         else flag = -6;
       } else {
-        lineflag = GranSurfExtra::nearest_point_line(xsphere,p3,p1,pt);
+        lineflag = SurfExtra::nearest_point_line(xsphere,p3,p1,pt);
         if (lineflag == 1) flag = -3;
         else if (lineflag == -1) flag = -6;
         else flag = -4;

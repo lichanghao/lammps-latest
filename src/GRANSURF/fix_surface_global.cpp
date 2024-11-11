@@ -22,7 +22,6 @@
 #include "force.h"
 #include "granular_model.h"
 #include "gran_sub_mod.h"
-#include "gran_surf_extra.h"
 #include "input.h"
 #include "lattice.h"
 #include "math_const.h"
@@ -35,6 +34,7 @@
 #include "neighbor.h"
 #include "region.h"
 #include "stl_reader.h"
+#include "surf_extra.h"
 #include "tokenizer.h"
 #include "update.h"
 #include "variable.h"
@@ -47,7 +47,7 @@ using namespace FixConst;
 using namespace Granular_NS;
 using namespace MathConst;
 using namespace MathExtra;
-using namespace GranSurfExtra;
+using namespace SurfExtra;
 
 static constexpr int MAX_GROUP = 32;
 
@@ -722,7 +722,7 @@ void FixSurfaceGlobal::post_force(int vflag)
         //   rsq = squared length of dr
         // NOTE: different for line vs tri
 
-        jflag = GranSurfExtra::
+        jflag = SurfExtra::
           overlap_sphere_line(x[i],radius[i],
                               points[lines[j].p1].x,points[lines[j].p2].x,
                               contact,dr,rsq);
@@ -747,7 +747,7 @@ void FixSurfaceGlobal::post_force(int vflag)
         //   dr = vector from contact pt to sphere center
         //   rsq = squared length of dr
 
-        jflag = GranSurfExtra::
+        jflag = SurfExtra::
           overlap_sphere_tri(x[i],radius[i],
                              points[tris[j].p1].x,points[tris[j].p2].x,
                              points[tris[j].p3].x,tris[j].norm,

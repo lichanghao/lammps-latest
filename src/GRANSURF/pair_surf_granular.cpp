@@ -19,7 +19,6 @@
 #include "comm.h"
 #include "granular_model.h"
 #include "gran_sub_mod.h"
-#include "gran_surf_extra.h"
 #include "error.h"
 #include "fix.h"
 #include "fix_dummy.h"
@@ -31,12 +30,13 @@
 #include "modify.h"
 #include "neigh_list.h"
 #include "neighbor.h"
+#include "surf_extra.h"
 #include "update.h"
 
 using namespace LAMMPS_NS;
 using namespace Granular_NS;
 using namespace MathExtra;
-using namespace GranSurfExtra;
+using namespace SurfExtra;
 
 enum {NONE, LINE, TRI};
 
@@ -222,12 +222,12 @@ void PairSurfGranular::compute(int eflag, int vflag)
       
       if (style == LINE) {
         endpt = endpts[atom->line[j]];
-        jflag = GranSurfExtra::
+        jflag = SurfExtra::
           overlap_sphere_line(x[i],radius[i],&endpt[0],&endpt[3],contact,dr,rsq);
 
       } else if (style == TRI) {
         corner = corners[atom->tri[j]];
-        jflag = GranSurfExtra::
+        jflag = SurfExtra::
           overlap_sphere_tri(x[i],radius[i],
                              &corner[0],&corner[3],&corner[6],&corner[9],
                              contact,dr,rsq);

@@ -11,10 +11,10 @@
    See the README file in the top-level LAMMPS directory.
 ------------------------------------------------------------------------- */
 
-#ifndef LMP_GRAN_SURF_EXTRA_H
-#define LMP_GRAN_SURF_EXTRA_H
+#ifndef LMP_SURF_EXTRA_H
+#define LMP_SURF_EXTRA_H
 
-namespace GranSurfExtra {
+namespace SurfExtra {
 
   int overlap_sphere_line(double *, double, double *, double *,
                           double *, double *, double &);
