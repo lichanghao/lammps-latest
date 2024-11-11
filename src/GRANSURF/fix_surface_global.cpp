@@ -164,7 +164,7 @@ FixSurfaceGlobal::FixSurfaceGlobal(LAMMPS *lmp, int narg, char **arg) :
 
   nmotion = maxmotion = 0;
   motions = NULL;
-  
+
   points_lastneigh = nullptr;
   points_original = nullptr;
   xsurf_original = nullptr;
@@ -228,7 +228,7 @@ FixSurfaceGlobal::~FixSurfaceGlobal()
   memory->sfree(tris);
 
   // NOTE: need to free motions and their contents
-  
+
   memory->destroy(points_lastneigh);
   memory->destroy(points_original);
   memory->destroy(xsurf_original);
@@ -523,7 +523,7 @@ void FixSurfaceGlobal::pre_neighbor()
     }
   }
   */
-  
+
   int inum = 0;
   ipage->reset();
   if (use_history) {
@@ -609,6 +609,7 @@ void FixSurfaceGlobal::pre_neighbor()
 void FixSurfaceGlobal::post_force(int vflag)
 {
   int i,j,k,ii,jj,inum,jnum,jflag,otherflag;
+  double xtmp,ytmp,ztmp,radi,delx,dely,delz;
   double meff,factor_couple;
   double rsq,dr[3],contact[3],ds[3],vs[3],*forces,*torquesi;
   int *ilist,*jlist,*numneigh,**firstneigh;
@@ -672,6 +673,10 @@ void FixSurfaceGlobal::post_force(int vflag)
   for (ii = 0; ii < inum; ii++) {
     i = ilist[ii];
     if (!(mask[i] & groupbit)) continue;
+    xtmp = x[i][0];
+    ytmp = x[i][1];
+    ztmp = x[i][2];
+    radi = radius[i];
     model->xi = x[i];
     model->radi = radius[i];
     model->vi = v[i];
@@ -686,8 +691,74 @@ void FixSurfaceGlobal::post_force(int vflag)
     for (jj = 0; jj < jnum; jj++) {
       j = jlist[jj];
 
+      delx = xtmp - xsurf[j][0];
+      dely = xtmp - xsurf[j][1];
+      delz = xtmp - xsurf[j][2];
+      rsq = delx * delx + dely * dely + delz * delz;
+
+      radsum = radi + rsurf[j];
+      if (rsq > radsum * radsum) {
+        if (use_history) {
+          touch[jj] = 0;
+          history = &allhistory[size_history * jj];
+          for (k = 0; k < size_history; k++) history[k] = 0.0;
+        }
+        continue;
+      }
+
+      // contact computation for line or tri
+
+      if (dimension == 2) {
+
+        // check for overlap of sphere and line segment
+        // jflag = 0 for no overlap, 1 for interior line pt, -1/-2 for end pts
+        // if no overlap, just continue
+        // for overlap, also return:
+        //   contact = nearest point on line to sphere center
+        //   dr = vector from contact pt to sphere center
+        //   rsq = squared length of dr
+        // NOTE: different for line vs tri
+
+        jflag = SurfExtra::
+          overlap_sphere_line(x[i],radius[i],
+                              points[lines[j].p1].x,points[lines[j].p2].x,
+                              contact,dr,rsq);
+      } else {
+
+        // check for overlap of sphere and triangle
+        // jflag = 0 for no overlap, 1 for interior line pt,
+        //   -1/-2/-3 for 3 edges, -4/-5/-6 for 3 corner pts
+        // if no overlap, just continue
+        // for overlap, also returns:
+        //   contact = nearest point on tri to sphere center
+        //   dr = vector from contact pt to sphere center
+        //   rsq = squared length of dr
+
+        jflag = SurfExtra::
+          overlap_sphere_tri(x[i],radius[i],
+                             points[tris[j].p1].x,points[tris[j].p2].x,
+                             points[tris[j].p3].x,tris[j].norm,
+                             contact,dr,rsq);
+      }
+
+      if (!jflag) {
+        if (use_history) {
+          touch[jj] = 0;
+          history = &allhistory[size_history * jj];
+          for (k = 0; k < size_history; k++) history[k] = 0.0;
+        }
+        continue;
+      }
+
+      // append contact surf to list
+    }
+
+    // Reduce set of contacts
+
+    /*
+    For contact in reduced contacts:
       // reset model and copy initial geometric data
-      
+
       model->xj = xsurf[j];
       model->radj = radsurf[j];
       if (use_history) model->touch = touch[jj];
@@ -708,64 +779,6 @@ void FixSurfaceGlobal::post_force(int vflag)
       }
 
       rsq = model->rsq;
-
-      // contact computation for line or tri
-
-      if (dimension == 2) {
-
-        // check for overlap of sphere and line segment
-        // jflag = 0 for no overlap, 1 for interior line pt, -1/-2 for end pts
-        // if no overlap, just continue
-        // for overlap, also return:
-        //   contact = nearest point on line to sphere center
-        //   dr = vector from contact pt to sphere center
-        //   rsq = squared length of dr
-        // NOTE: different for line vs tri
-
-        jflag = SurfExtra::
-          overlap_sphere_line(x[i],radius[i],
-                              points[lines[j].p1].x,points[lines[j].p2].x,
-                              contact,dr,rsq);
-
-        if (!jflag) {
-          if (use_history) {
-            touch[jj] = 0;
-            history = &allhistory[size_history * jj];
-            for (k = 0; k < size_history; k++) history[k] = 0.0;
-          }
-          continue;
-        }
-
-      } else {
-
-        // check for overlap of sphere and triangle
-        // jflag = 0 for no overlap, 1 for interior line pt,
-        //   -1/-2/-3 for 3 edges, -4/-5/-6 for 3 corner pts
-        // if no overlap, just continue
-        // for overlap, also returns:
-        //   contact = nearest point on tri to sphere center
-        //   dr = vector from contact pt to sphere center
-        //   rsq = squared length of dr
-
-        jflag = SurfExtra::
-          overlap_sphere_tri(x[i],radius[i],
-                             points[tris[j].p1].x,points[tris[j].p2].x,
-                             points[tris[j].p3].x,tris[j].norm,
-                             contact,dr,rsq);
-
-        if (!jflag) {
-          if (use_history) {
-            touch[jj] = 0;
-            history = &allhistory[size_history * jj];
-            for (k = 0; k < size_history; k++) history[k] = 0.0;
-          }
-          continue;
-        }
-      }
-
-      // apply new rsq
-
-      model->rsq = rsq;
 
       // meff = effective mass of sphere
       // if I is part of rigid body, use body mass
@@ -815,8 +828,7 @@ void FixSurfaceGlobal::post_force(int vflag)
       add3(f[i], forces, f[i]);
       add3(torque[i], torquesi, torque[i]);
       if (heat_flag) heatflow[i] += model->dq;
-    }
-  }
+  */
 }
 
 /* ----------------------------------------------------------------------
@@ -827,7 +839,7 @@ void FixSurfaceGlobal::post_force(int vflag)
 int FixSurfaceGlobal::modify_param(int narg, char **arg)
 {
   // group options
-  
+
   if (strcmp(arg[0],"group") == 0) {
     if (narg < 4) error->all(FLERR,"Illegal fix_modify command");
 
@@ -841,10 +853,10 @@ int FixSurfaceGlobal::modify_param(int narg, char **arg)
   }
 
   // move options
-  
+
   if (strcmp(arg[0],"move") == 0) {
     if (narg < 2) error->all(FLERR,"Illegal fix_modify command");
-    
+
     int ifix = modify->find_fix(id);
 
     if (strcmp(arg[1],"none") == 0) {
@@ -854,7 +866,7 @@ int FixSurfaceGlobal::modify_param(int narg, char **arg)
       next_reneighbor = -1;
 
       // NOTE: this data exists for every motion instance ?
-      
+
       move_clear();
       return 2;
     }
@@ -872,10 +884,10 @@ int FixSurfaceGlobal::modify_param(int narg, char **arg)
     int igroup = find_group(arg[1]);
     if (igroup < 0) error->all(FLERR,"Fix surface/global move group does not exist");
     motions[nmotion].igroup = igroup;
-    
+
     int argcount = modify_params_move(&motions[nmotion],narg-2,&arg[2]);
     nmotion++;
-    
+
     force_reneighbor = 1;
     next_reneighbor = -1;
 
@@ -883,7 +895,7 @@ int FixSurfaceGlobal::modify_param(int narg, char **arg)
   }
 
   // keyword not recognized
-    
+
   return 0;
 }
 
@@ -894,17 +906,17 @@ int FixSurfaceGlobal::modify_params_group(int igroup, int bit, int narg, char **
   /*
   if (strcmp(arg[0],"region") == 0) {
     if (narg < 2) error->all(FLERR,"Illegal fix_modify command");
-    
+
     auto region = domain->get_region_by_id(arg[3]);
     if (!region) error->all(FLERR,"Region {} for fix_modify group region does not exist", arg[3]);
     region->init();
     region->prematch();
-    
+
     // check center point for each line or tri
 
     double xc,yc,zc;
     double *x1,*x2,*x3;
-    
+
     if (dimension == 2) {
       for (int i = 0; i < nsurf; i++) {
         x1 = points[lines[i].p1].x;
@@ -920,7 +932,7 @@ int FixSurfaceGlobal::modify_params_group(int igroup, int bit, int narg, char **
         x1 = points[tris[i].p1].x;
         x2 = points[tris[i].p2].x;
         x3 = points[tris[i].p3].x;
-        xc = onethird * (x1[0] + x2[0] + x3[0]);  
+        xc = onethird * (x1[0] + x2[0] + x3[0]);
         yc = onethird * (x1[1] + x2[1] + x3[1]);
         zc = onethird * (x1[2] + x2[2] + x3[2]);
         if (region->match(xc,yc,zc))
@@ -933,12 +945,12 @@ int FixSurfaceGlobal::modify_params_group(int igroup, int bit, int narg, char **
     if (strcmp(arg[0],"type") == 0 ||
         strcmp(arg[0],"id") == 0 ||
         strcmp(arg[0],"molecule") == 0) {
-      
+
       int category;
       if (strcmp(arg[1],"type") == 0) category = TYPE;
       else if (strcmp(arg[1],"molecule") == 0) category = MOLECULE;
       else if (strcmp(arg[1],"id") == 0) category = ID;
-      
+
       // args = logical condition
 
       if (narg > 3 &&
@@ -946,7 +958,7 @@ int FixSurfaceGlobal::modify_params_group(int igroup, int bit, int narg, char **
            strcmp(arg[2],"<=") == 0 || strcmp(arg[2],">=") == 0 ||
            strcmp(arg[2],"==") == 0 || strcmp(arg[2],"!=") == 0 ||
            strcmp(arg[2],"<>") == 0)) {
-      
+
         int condition = -1;
         if (strcmp(arg[2],"<") == 0) condition = LT;
         else if (strcmp(arg[2],"<=") == 0) condition = LE;
@@ -956,7 +968,7 @@ int FixSurfaceGlobal::modify_params_group(int igroup, int bit, int narg, char **
         else if (strcmp(arg[2],"!=") == 0) condition = NEQ;
         else if (strcmp(arg[2],"<>") == 0) condition = BETWEEN;
         else error->all(FLERR,"Illegal fix surface/global group command");
-        
+
         int bound1,bound2;
         bound1 = utils::inumeric(FLERR, arg[3], false, lmp);
         bound2 = -1;
@@ -965,7 +977,7 @@ int FixSurfaceGlobal::modify_params_group(int igroup, int bit, int narg, char **
           if (narg < 4) error->all(FLERR,"Illegal group command");
           bound2 = utils::inumeric(FLERR, arg[3], false, lmp);
         }
-        
+
         // add to group if meets condition
 
         int attribute;
@@ -997,14 +1009,14 @@ int FixSurfaceGlobal::modify_params_group(int igroup, int bit, int narg, char **
               gmask[i] |= bit;
           }
         }
-        
+
         return 4;
       }
-        
+
       // args = list of values
       // NOTE: how to stop at end of args - check if non-numeric
       // NOTE: how to parse colon syntax
-      
+
       char *typestr = nullptr;
       tagint start,stop,delta;
 
@@ -1034,7 +1046,7 @@ int FixSurfaceGlobal::modify_params_group(int igroup, int bit, int narg, char **
         // add to group if attribute matches value or sequence
 
         int attribute;
-          
+
         for (int i = 0; i < nsurf; i++) {
           attribute = i+1;
           if (dimension == 2) {
@@ -1044,22 +1056,22 @@ int FixSurfaceGlobal::modify_params_group(int igroup, int bit, int narg, char **
             if (category == TYPE) attribute = tris[i].type;
             else if (category == MOLECULE) attribute = tris[i].mol;
           }
-          
+
           if (attribute >= start && attribute <= stop &&
               (attribute-start) % delta == 0) gmask[i] |= bit;
         }
-          
+
         delete [] typestr;
       }
-      
+
         return 4;
     }
-    
+
     // return error
   }
-  
+
   */
-  
+
   return 0;
 }
 
@@ -1070,7 +1082,7 @@ int FixSurfaceGlobal::modify_params_move(Motion *motion, int narg, char **arg)
   if (strcmp(arg[0],"linear") == 0) {
     if (narg < 4) error->all(FLERR,"Illegal fix_modify move command");
     motion->mstyle = LINEAR;
-    
+
     if (strcmp(arg[1], "NULL") == 0) motion->vxflag = 0;
     else {
       motion->vxflag = 1;
@@ -1086,14 +1098,14 @@ int FixSurfaceGlobal::modify_params_move(Motion *motion, int narg, char **arg)
       motion->vzflag = 1;
       motion->vz = utils::numeric(FLERR, arg[3], false, lmp);
     }
-    
+
     return 4;
   }
-  
+
   if (strcmp(arg[0],"wiggle") == 0) {
     if (narg < 5) error->all(FLERR,"Illegal fix_modify move command");
     motion->mstyle = WIGGLE;
-    
+
     if (strcmp(arg[1], "NULL") == 0) motion->axflag = 0;
     else {
       motion->axflag = 1;
@@ -1115,7 +1127,7 @@ int FixSurfaceGlobal::modify_params_move(Motion *motion, int narg, char **arg)
 
     return 5;
   }
-  
+
   if (strcmp(arg[0],"rotate") == 0) {
     if (narg < 8) error->all(FLERR,"Illegal fix_modify move command");
     motion->mstyle = ROTATE;
@@ -1123,36 +1135,36 @@ int FixSurfaceGlobal::modify_params_move(Motion *motion, int narg, char **arg)
     motion->point[0] = utils::numeric(FLERR,arg[1],false,lmp);
     motion->point[1] = utils::numeric(FLERR,arg[2],false,lmp);
     motion->point[2] = utils::numeric(FLERR,arg[3],false,lmp);
-    
+
     motion->axis[0] = utils::numeric(FLERR,arg[4],false,lmp);
     motion->axis[1] = utils::numeric(FLERR,arg[5],false,lmp);
-    motion->axis[2] = utils::numeric(FLERR,arg[6],false,lmp); 
+    motion->axis[2] = utils::numeric(FLERR,arg[6],false,lmp);
     if (dimension == 2)
       if (motion->mstyle == ROTATE && (motion->axis[0] != 0.0 || motion->axis[1] != 0.0))
         error->all(FLERR,"Fix_modify move cannot rotate around "
                    "non z-axis for 2d problem");
-   
+
     motion->period = utils::numeric(FLERR,arg[7],false,lmp);
     if (motion->period <= 0.0) error->all(FLERR,"Illegal fix_modify move command");
-    
+
     motion->time_origin = update->ntimestep;
     motion->omega = MY_2PI / motion->period;
-    
+
     // runit = unit vector along rotation axis
-    
+
     double len = MathExtra::len3(motion->axis);
     if (len == 0.0)
       error->all(FLERR,"Fix_modify move zero length rotation vector");
     MathExtra::normalize3(motion->axis,motion->unit);
 
     // NOTE: how do these 2 operations now work
-    
+
     move_clear();
     move_init();
-    
+
     return 8;
   }
-  
+
   if (strcmp(arg[0],"transrot") == 0) {
     if (narg < 11) error->all(FLERR,"Illegal fix_modify move command");
     motion->mstyle = TRANSROT;
@@ -1165,41 +1177,41 @@ int FixSurfaceGlobal::modify_params_move(Motion *motion, int narg, char **arg)
     motion->point[0] = utils::numeric(FLERR,arg[4],false,lmp);
     motion->point[1] = utils::numeric(FLERR,arg[5],false,lmp);
     motion->point[2] = utils::numeric(FLERR,arg[6],false,lmp);
-    
+
     motion->axis[0] = utils::numeric(FLERR,arg[7],false,lmp);
     motion->axis[1] = utils::numeric(FLERR,arg[8],false,lmp);
-    motion->axis[2] = utils::numeric(FLERR,arg[9],false,lmp); 
+    motion->axis[2] = utils::numeric(FLERR,arg[9],false,lmp);
     if (dimension == 2)
       if (motion->mstyle == ROTATE && (motion->axis[0] != 0.0 || motion->axis[1] != 0.0))
         error->all(FLERR,"Fix_modify move cannot rotate around "
                    "non z-axis for 2d problem");
-   
+
     motion->period = utils::numeric(FLERR,arg[10],false,lmp);
     if (motion->period <= 0.0) error->all(FLERR,"Illegal fix_modify move command");
-    
+
     motion->time_origin = update->ntimestep;
     motion->omega = MY_2PI / motion->period;
-    
+
     // runit = unit vector along rotation axis
-    
+
     double len = MathExtra::len3(motion->axis);
     if (len == 0.0)
       error->all(FLERR,"Fix_modify move zero length rotation vector");
     MathExtra::normalize3(motion->axis,motion->unit);
 
     // NOTE: how do these 2 operations now work
-    
+
     move_clear();
     move_init();
-    
+
     return 11;
   }
-      
+
   if (strcmp(arg[0],"variable") == 0) {
   }
 
   //error return;
-    
+
   //return iarg;
   return 0;
 }
@@ -1218,12 +1230,12 @@ int FixSurfaceGlobal::find_group(const char *name)
 int FixSurfaceGlobal::add_group(const char *name)
 {
   if (ngroup == MAX_GROUP) error->all(FLERR,"Fix surface/global too many groups");
-  
+
   int n = strlen(name) + 1;
   gnames[ngroup] = new char[n];
   strcpy(gnames[ngroup],name);
   ngroup++;
-  
+
   return ngroup-1;
 }
 
