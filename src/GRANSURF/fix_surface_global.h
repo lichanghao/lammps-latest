@@ -22,6 +22,7 @@ FixStyle(surface/global,FixSurfaceGlobal)
 
 #include <stdio.h>
 #include "fix.h"
+#include "fix.h"
 
 namespace LAMMPS_NS {
 
@@ -121,8 +122,7 @@ class FixSurfaceGlobal : public Fix {
   struct Line {
     int mol,type;           // molID and type of the line
     int p1,p2;              // indices of points in line segment
-    //double norm[3];         // unit normal to line = Z x (p2-p1)
-                              // not currently set or used
+    double norm[3];         // unit normal to line = Z x (p2-p1)
   };
 
   struct Tri {
@@ -147,7 +147,12 @@ class FixSurfaceGlobal : public Fix {
     int np1,np2;          // # of lines connected to pts 1,2 (including self)
     int *neigh_p1;        // indices of all lines connected to pt1 (if np1 > 1)
     int *neigh_p2;        // ditto for pt2
-    int flags;            // future flags for end pt coupling
+    int *cside_p1;        // sidedness for each line connected to pt1
+    int *cside_p2;        // ditto for pt2
+                          // cside = SAMESIDE, OPPOSITESIDE
+    int *cflag_p1;        // connection flag for each line connected to pt1
+    int *cflag_p2;        // ditto for pt2
+                          // cflag = FLAT, CONCAVE, CONVEX
   };
 
   struct Connect3d {      // tri connectivity

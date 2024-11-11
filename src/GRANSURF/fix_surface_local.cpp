@@ -1952,7 +1952,7 @@ void FixSurfaceLocal::extract_from_stlfile(char *filename)
 /* ----------------------------------------------------------------------
    create and initialize Connect2d info for all lines
    this can be done with EXACT point matching
-     since global points were inferred from molecule or STL files
+     since global points were inferred from molecule file
      and all procs store a copy of all global points
    info stored in connect2dall
 ------------------------------------------------------------------------- */

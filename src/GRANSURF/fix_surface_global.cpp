@@ -1588,8 +1588,9 @@ void FixSurfaceGlobal::extract_from_stlfile(char *filename)
 
 void FixSurfaceGlobal::connectivity2d_global()
 {
-  connect2d = (Connect2d *) memory->smalloc(nlines*sizeof(Connect2d),
-                                            "surface/global:connect2d");
+  connect2d = (Connect2d *)
+    memory->smalloc(nlines*sizeof(Connect2d),
+                    "surface/global:connect2d");
 
   // setup end point connectivity lists
   // count # of lines containing each end point
@@ -1637,8 +1638,9 @@ void FixSurfaceGlobal::connectivity3d_global()
 {
   int p1,p2,p3;
 
-  connect3d = (Connect3d *) memory->smalloc(ntris*sizeof(Connect3d),
-                                            "surface/global:connect3d");
+  connect3d = (Connect3d *)
+    memory->smalloc(ntris*sizeof(Connect3d),
+                    "surface/global:connect3d");
   int **tri2edge;
   memory->create(tri2edge,ntris,3,"surfface/global::tri2edge");
 
@@ -1777,15 +1779,15 @@ void FixSurfaceGlobal::connectivity3d_global()
 
 /* ----------------------------------------------------------------------
    set attributes of all lines or tris
-   xsurf,vsurf,omegasurf
-   norm of triangles
+   xsurf,vsurf,omegasurf,norm
 ------------------------------------------------------------------------- */
 
 void FixSurfaceGlobal::surface_attributes()
 {
   double delta[3],p12[3],p13[3];
   double *p1,*p2,*p3;
-
+  double zunit[3] = {0.0,0.0,1.0};
+    
   memory->create(xsurf,nsurf,3,"surface/global:xsurf");
   memory->create(vsurf,nsurf,3,"surface/global:vsurf");
   memory->create(omegasurf,nsurf,3,"surface/global:omegasurf");
@@ -1799,12 +1801,15 @@ void FixSurfaceGlobal::surface_attributes()
       xsurf[i][1] = 0.5 * (p1[1]+p2[1]);
       xsurf[i][2] = 0.0;
 
-      MathExtra::sub3(p1,p2,delta);
-      radsurf[i] = 0.5 * MathExtra::len3(delta);
+      MathExtra::sub3(p2,p1,p12);
+      radsurf[i] = 0.5 * MathExtra::len3(p12);
+
+      MathExtra::cross3(zunit,p12,lines[i].norm);
+      MathExtra::norm3(lines[i].norm);
     }
 
   } else {
-
+    
     for (int i = 0; i < nsurf; i++) {
       p1 = points[tris[i].p1].x;
       p2 = points[tris[i].p2].x;
@@ -1821,8 +1826,8 @@ void FixSurfaceGlobal::surface_attributes()
       radsurf[i] = MAX(radsurf[i],MathExtra::lensq3(delta));
       radsurf[i] = sqrt(radsurf[i]);
 
-      MathExtra::sub3(p1,p2,p12);
-      MathExtra::sub3(p1,p3,p13);
+      MathExtra::sub3(p2,p1,p12);
+      MathExtra::sub3(p3,p1,p13);
       MathExtra::cross3(p12,p13,tris[i].norm);
       MathExtra::norm3(tris[i].norm);
     }
