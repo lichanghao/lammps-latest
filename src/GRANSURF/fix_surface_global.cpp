@@ -697,7 +697,7 @@ void FixSurfaceGlobal::post_force(int vflag)
       rsq = delx * delx + dely * dely + delz * delz;
 
       // skip contact check if particle/surf are too far apart
-      
+
       radsum = radi + rsurf[j];
       if (rsq > radsum * radsum) {
         if (use_history) {
@@ -742,6 +742,8 @@ void FixSurfaceGlobal::post_force(int vflag)
                              contact,dr,rsq);
       }
 
+      // unset non-touching neighbors
+
       if (!jflag) {
         if (use_history) {
           touch[jj] = 0;
@@ -752,7 +754,7 @@ void FixSurfaceGlobal::post_force(int vflag)
       }
 
       // append surf to list of contacts
-      
+
     }
 
     // Reduce set of contacts
@@ -760,6 +762,11 @@ void FixSurfaceGlobal::post_force(int vflag)
     /*
     For contact in reduced contacts:
       // reset model and copy initial geometric data
+
+      factor_lj = special_lj[sbmask(j)]; // presumably not necessary
+      j &= NEIGHMASK;
+
+      if (factor_lj == 0) continue;
 
       model->xj = xsurf[j];
       model->radj = radsurf[j];
@@ -1801,7 +1808,7 @@ void FixSurfaceGlobal::surface_attributes()
   double delta[3],p12[3],p13[3];
   double *p1,*p2,*p3;
   double zunit[3] = {0.0,0.0,1.0};
-    
+
   memory->create(xsurf,nsurf,3,"surface/global:xsurf");
   memory->create(vsurf,nsurf,3,"surface/global:vsurf");
   memory->create(omegasurf,nsurf,3,"surface/global:omegasurf");
@@ -1823,7 +1830,7 @@ void FixSurfaceGlobal::surface_attributes()
     }
 
   } else {
-    
+
     for (int i = 0; i < nsurf; i++) {
       p1 = points[tris[i].p1].x;
       p2 = points[tris[i].p2].x;

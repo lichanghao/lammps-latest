@@ -66,6 +66,7 @@ void PairSurfGranular::compute(int eflag, int vflag)
 {
   int i,j,k,ii,jj,inum,jnum,itype,jtype;
   int isphere,itri,jflag,kflag,otherflag;
+  double xtmp,ytmp,ztmp,radi,delx,dely,delz;
   double radsphere,rsq,dr[3],contact[3],ds[3],vs[3];
   double factor_couple,factor_lj,mi,mj,meff;
   double *endpt, *corner;
@@ -160,6 +161,14 @@ void PairSurfGranular::compute(int eflag, int vflag)
   for (ii = 0; ii < inum; ii++) {
     i = ilist[ii];
     itype = type[i];
+    xtmp = x[i][0];
+    ytmp = x[i][1];
+    ztmp = x[i][2];
+    radi = radius[i];
+    model->xi = x[i];
+    model->radi = radius[i];
+    model->vi = v[i];
+    model->omegai = omega[i];
     if (use_history) {
       touch = firsttouch[i];
       allhistory = firsthistory[i];
@@ -174,30 +183,6 @@ void PairSurfGranular::compute(int eflag, int vflag)
 
       if (factor_lj == 0) continue;
 
-      jtype = type[j];
-      model = models_list[types_indices[itype][jtype]];
-
-      // reset model and copy initial geometric data
-      
-      model->xi = x[i];
-      model->xj = x[j];
-      model->radi = radius[i];
-      model->radj = radius[j];
-      if (use_history) model->touch = touch[jj];
-
-      // unset non-touching neighbors
-
-      touchflag = model->check_contact();
-
-      if (!touchflag) {
-        if (use_history) {
-          touch[jj] = 0;
-          history = &allhistory[size_history * jj];
-          for (k = 0; k < size_history; k++) history[k] = 0.0;
-        }
-        continue;
-      }
-
       // sanity check that neighbor list is built correctly
 
       if ((style == LINE) && (line[i] >= 0 || line[j] < 0))
@@ -205,6 +190,23 @@ void PairSurfGranular::compute(int eflag, int vflag)
 
       if ((style == TRI) && (tri[i] >= 0 || tri[j] < 0))
         error->one(FLERR,"Pair surf/granular interaction is invalid");
+
+      delx = xtmp - xsurf[j][0];
+      dely = xtmp - xsurf[j][1];
+      delz = xtmp - xsurf[j][2];
+      rsq = delx * delx + dely * dely + delz * delz;
+
+      // skip contact check if particle/surf are too far apart
+
+      radsum = radi + rsurf[j];
+      if (rsq > radsum * radsum) {
+        if (use_history) {
+          touch[jj] = 0;
+          history = &allhistory[size_history * jj];
+          for (k = 0; k < size_history; k++) history[k] = 0.0;
+        }
+        continue;
+      }
 
       // check for overlap of sphere and line segment/triangle
       // for line:
@@ -218,8 +220,6 @@ void PairSurfGranular::compute(int eflag, int vflag)
       //   dr = vector from contact pt to sphere center
       //   rsq = squared length of dr
 
-      rsq = model->rsq;
-      
       if (style == LINE) {
         endpt = endpts[atom->line[j]];
         jflag = SurfExtra::
@@ -233,10 +233,6 @@ void PairSurfGranular::compute(int eflag, int vflag)
                              contact,dr,rsq);
       }
 
-      // NOTE: this unsetting occurs twice -- see above ?
-      // NOTE: maybe it should just be here, with no call to
-      //       model-:check_contact() above ?
-      
       // unset non-touching neighbors
 
       if (!jflag) {
@@ -248,14 +244,41 @@ void PairSurfGranular::compute(int eflag, int vflag)
         continue;
       }
 
+      // append surf to list of contacts
+
+    }
+
+    // Reduce set of contacts
+
+    /*
+    For contact in reduced contacts:
+
+      factor_lj = special_lj[sbmask(j)]; // presumably not necessary
+      j &= NEIGHMASK;
+
+      if (factor_lj == 0) continue;
+
       // if any history is needed
-      
+
       if (use_history) touch[jj] = 1;
 
       // calculate new data
       // ds = vector from line/tri center to contact pt
       // vs = velocity of contact pt on line/tri, translation + rotation
       // omega for tri was set from angmom by calculate_corners()
+
+
+
+      jtype = type[j];
+      model = models_list[types_indices[itype][jtype]];
+
+      // reset model and copy initial geometric data
+
+      model->xi = x[i];
+      model->xj = x[j];
+      model->radi = radius[i];
+      model->radj = radius[j];
+      if (use_history) model->touch = touch[jj];
 
       model->rsq = rsq;
 
@@ -339,7 +362,7 @@ void PairSurfGranular::compute(int eflag, int vflag)
         ev_tally_xyz(i,j,nlocal,force->newton_pair,
           0.0,0.0,forces[0],forces[1],forces[2],model->dx[0],model->dx[1],model->dx[2]);
       }
-    }
+    */
   }
 
   // NOTE: should there be virial contributions from boundary tris?
