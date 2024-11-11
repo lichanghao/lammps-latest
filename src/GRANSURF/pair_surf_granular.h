@@ -39,7 +39,7 @@ class PairSurfGranular : public PairGranular {
   int style;
   int emax;                // allocated size of endpt list
   double **endpts;         // current end pts of each line
-                           // Nall x 4 array for local + ghost atoms
+                           // Nall x 6 array for local + ghost atoms
 
   int cmax;                // allocated size of corners
   double **corners;        // current corner pts and norm of each tri
@@ -57,20 +57,11 @@ class PairSurfGranular : public PairGranular {
   FixSurfaceLocal::Connect3d *connect3d;   // ptr to connectivity info
   MyPoolChunk<int> *tcp;                   // allocator for connectivity info
 
-  // lines
+  // lines and tris
 
   void calculate_endpts();
-  int overlap_sphere_line(int, int, double *, double *, double &);
-  int endpt_neigh_check(int, int, int);
-
-  // tri
-
   void calculate_corners();
   void corners2norm(double *, double *);
-  int overlap_sphere_tri(int, int, double *, double *, double &);
-  int nearest_point_line(double *, double *, double *, double *);
-  int edge_neigh_check(int, int, int);
-  int corner_neigh_check(int, int, int);
 };
 
 }    // namespace LAMMPS_NS

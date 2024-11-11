@@ -692,9 +692,11 @@ void FixSurfaceGlobal::post_force(int vflag)
       model->radj = radsurf[j];
       if (use_history) model->touch = touch[jj];
 
-      touch_flag = model->check_contact();
+      // unset non-touching neighbors
+      // NOTE: in pair_surf_granular, this unsetting occurs twice ?
+      // NOTE: maybe it should only be below, after call to overlap() methods ?
 
-      // unset non-touching neighbor
+      touch_flag = model->check_contact();
 
       if (!touch_flag) {
         if (use_history) {

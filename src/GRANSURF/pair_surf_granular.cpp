@@ -19,6 +19,7 @@
 #include "comm.h"
 #include "granular_model.h"
 #include "gran_sub_mod.h"
+#include "gran_surf_extra.h"
 #include "error.h"
 #include "fix.h"
 #include "fix_dummy.h"
@@ -35,6 +36,7 @@
 using namespace LAMMPS_NS;
 using namespace Granular_NS;
 using namespace MathExtra;
+using namespace GranSurfExtra;
 
 enum {NONE, LINE, TRI};
 
@@ -66,6 +68,7 @@ void PairSurfGranular::compute(int eflag, int vflag)
   int isphere,itri,jflag,kflag,otherflag;
   double radsphere,rsq,dr[3],contact[3],ds[3],vs[3];
   double factor_couple,factor_lj,mi,mj,meff;
+  double *endpt, *corner;
   double *forces, *torquesi, *torquesj, dq;
   double omega0[3] = {0.0, 0.0, 0.0};
 
@@ -174,17 +177,19 @@ void PairSurfGranular::compute(int eflag, int vflag)
       jtype = type[j];
       model = models_list[types_indices[itype][jtype]];
 
-      // Reset model and copy initial geometric data
+      // reset model and copy initial geometric data
+      
       model->xi = x[i];
       model->xj = x[j];
       model->radi = radius[i];
       model->radj = radius[j];
       if (use_history) model->touch = touch[jj];
 
+      // unset non-touching neighbors
+
       touchflag = model->check_contact();
 
       if (!touchflag) {
-        // unset non-touching neighbors
         if (use_history) {
           touch[jj] = 0;
           history = &allhistory[size_history * jj];
@@ -196,10 +201,10 @@ void PairSurfGranular::compute(int eflag, int vflag)
       // sanity check that neighbor list is built correctly
 
       if ((style == LINE) && (line[i] >= 0 || line[j] < 0))
-        error->one(FLERR,"Pair surf/granular iteraction is invalid");
+        error->one(FLERR,"Pair surf/granular interaction is invalid");
 
       if ((style == TRI) && (tri[i] >= 0 || tri[j] < 0))
-        error->one(FLERR,"Pair surf/granular iteraction is invalid");
+        error->one(FLERR,"Pair surf/granular interaction is invalid");
 
       // check for overlap of sphere and line segment/triangle
       // for line:
@@ -214,11 +219,27 @@ void PairSurfGranular::compute(int eflag, int vflag)
       //   rsq = squared length of dr
 
       rsq = model->rsq;
-      if (style == LINE) jflag = overlap_sphere_line(i,j,contact,dr,rsq);
-      if (style == TRI) jflag = overlap_sphere_tri(i,j,contact,dr,rsq);
+      
+      if (style == LINE) {
+        endpt = endpts[atom->line[j]];
+        jflag = GranSurfExtra::
+          overlap_sphere_line(x[i],radius[i],&endpt[0],&endpt[3],contact,dr,rsq);
+
+      } else if (style == TRI) {
+        corner = corners[atom->tri[j]];
+        jflag = GranSurfExtra::
+          overlap_sphere_tri(x[i],radius[i],
+                             &corner[0],&corner[3],&corner[6],&corner[9],
+                             contact,dr,rsq);
+      }
+
+      // NOTE: this unsetting occurs twice -- see above ?
+      // NOTE: maybe it should just be here, with no call to
+      //       model-:check_contact() above ?
+      
+      // unset non-touching neighbors
 
       if (!jflag) {
-        // unset non-touching neighbors
         if (use_history) {
           touch[jj] = 0;
           history = &allhistory[size_history * jj];
@@ -228,26 +249,8 @@ void PairSurfGranular::compute(int eflag, int vflag)
       }
 
       // if any history is needed
+      
       if (use_history) touch[jj] = 1;
-
-      // if contact = line end pt or tri edge/corner:
-      // check overlap status of adjacent line to the end pt or tri(s) to edge/corner
-      // otherflag = 0/1 for this/other line/tri performs calculation
-
-      if (jflag < 0) {
-        if (style == LINE) {
-          otherflag = endpt_neigh_check(i,j,jflag);
-          if (otherflag) continue;
-        } else if (style == TRI) {
-          if (jflag >= -3) {
-            otherflag = edge_neigh_check(i,j,jflag);
-            if (otherflag) continue;
-          } else {
-            otherflag = corner_neigh_check(i,j,jflag);
-            if (otherflag) continue;
-          }
-        }
-      }
 
       // calculate new data
       // ds = vector from line/tri center to contact pt
@@ -558,7 +561,7 @@ void PairSurfGranular::init_style()
 double PairSurfGranular::memory_usage()
 {
   double bytes = nmax * sizeof(double);
-  if (style == LINE) bytes = emax * 4 * sizeof(double);        // endpts array for line particles
+  if (style == LINE) bytes = emax * 6 * sizeof(double);        // endpts array for line particles
   if (style == TRI) bytes = emax * 12 * sizeof(double);        // corners array for tri particles
   return bytes;
 }
@@ -597,140 +600,11 @@ void PairSurfGranular::calculate_endpts()
     endpt = endpts[m];
     endpt[0] = x[i][0] - dx;
     endpt[1] = x[i][1] - dy;
-    endpt[2] = x[i][0] + dx;
-    endpt[3] = x[i][1] + dy;
+    endpt[2] = 0.0;
+    endpt[3] = x[i][0] + dx;
+    endpt[4] = x[i][1] + dy;
+    endpt[5] = 0.0;
   }
-}
-
-/* ----------------------------------------------------------------------
-   compute nearest point between sphere I and line segment J
-   return 0 if no contact, 1 if pt is interior to line segment,
-     -1/-2 if pt = line end point 1/2
-   if contact, return:
-     pt = point on line segment
-     r = vector from pt to sphere center
-     rsq = squared length of r
-   based on geometry.cpp::distsq_point_line() in SPARTA
-------------------------------------------------------------------------- */
-
-int PairSurfGranular::overlap_sphere_line(int i, int j, double *pt,
-                                           double *r, double &rsq)
-{
-  double p1[3],p2[3];
-  double a[3],b[3];
-
-  // P1,P2 = end points of line segment
-
-  double *endpt = endpts[atom->line[j]];
-
-  p1[0] = endpt[0];
-  p1[1] = endpt[1];
-  p1[2] = 0.0;
-  p2[0] = endpt[2];
-  p2[1] = endpt[3];
-  p2[2] = 0.0;
-
-  // A = vector from P1 to Xsphere
-  // B = vector from P1 to P2
-
-  double *xsphere = atom->x[i];
-  MathExtra::sub3(xsphere,p1,a);
-  MathExtra::sub3(p2,p1,b);
-
-  // alpha = fraction of distance from P1 to P2 that P is located at
-  // P = projected point on infinite line that is nearest to Xsphere center
-  // alpha can be any value
-
-  double alpha = MathExtra::dot3(a,b) / MathExtra::lensq3(b);
-
-  // pt = point on line segment that is nearest to Xsphere center
-  // if alpha <= 0.0, pt = P1, ptflag = -1
-  // if alpha >= 1.0, pt = P2, ptflag = -2
-  // else pt = P1 + alpha*(P2-P1), ptflag = 1
-
-  int ptflag;
-  if (alpha <= 0.0) {
-    ptflag = -1;
-    pt[0] = p1[0];
-    pt[1] = p1[1];
-    pt[2] = p1[2];
-  } else if (alpha >= 1.0) {
-    ptflag = -2;
-    pt[0] = p2[0];
-    pt[1] = p2[1];
-    pt[2] = p2[2];
-  } else {
-    ptflag = 1;
-    pt[0] = p1[0] + alpha*b[0];
-    pt[1] = p1[1] + alpha*b[1];
-    pt[2] = p1[2] + alpha*b[2];
-  }
-
-  // R = vector from nearest pt on line to Xsphere center
-  // return ptflag if len(R) < sphere radius
-  // else no contact, return 0
-
-  double radsq = atom->radius[i] * atom->radius[i];
-  MathExtra::sub3(xsphere,pt,r);
-  rsq = MathExtra::lensq3(r);
-  if (rsq < radsq) return ptflag;
-  return 0;
-}
-
-/* ----------------------------------------------------------------------
-   check overlap status of sphere I with line J versus any neighbor lines K
-   I overlaps J at jflag = -1,-2 for two end points
-   return 0 if this line J performs computation
-   return 1 if some other line K performs computation
-------------------------------------------------------------------------- */
-
-int PairSurfGranular::endpt_neigh_check(int i, int j, int jflag)
-{
-  // ncheck = # of neighbor lines to check
-  // neighs = indices of neighbor lines (including self)
-
-  int ncheck;
-  int *neighs;
-
-  int jc = atom->line[j];
-  if (jflag == -1) {
-    if (connect2d[jc].np1 == 1) return 0;
-    ncheck = connect2d[jc].np1;
-    neighs = connect2d[jc].neigh_p1;
-  } else if (jflag == -2) {
-    if (connect2d[jc].np2 == 1) return 0;
-    ncheck = connect2d[jc].np2;
-    neighs = connect2d[jc].neigh_p2;
-  }
-
-  // check overlap with each neighbor line
-  // if any line has interior overlap, another line computes
-  // if all lines have endpt overlap, line with lowest ID computes
-  // kflag = overlap status with neighbor line
-  // kflag = 1, interior overlap
-  // kflag = 0, no overlap, should not be possible
-  // kflag < 0, overlap at endpt
-
-  tagint *tag = atom->tag;
-
-  int k,kflag;
-  double rsq;
-  double dr[3],contact[3];
-
-  int linemin = tag[j];
-
-  for (int m = 0; m < ncheck; m++) {
-    if (neighs[m] == tag[j]) continue;     // skip self line
-    k = atom->map(neighs[m]);
-    if (k < 0) error->one(FLERR,"Pair surf/granular neighbor line is missing");
-    kflag = overlap_sphere_line(i,k,contact,dr,rsq);
-    if (kflag > 0) return 1;
-    if (kflag == 0) error->one(FLERR,"Fix surface/global neighbor line overlap is invalid");
-    linemin = MIN(linemin,tag[k]);
-  }
-
-  if (tag[j] == linemin) return 0;
-  return 1;
 }
 
 /* ----------------------------------------------------------------------
@@ -798,348 +672,4 @@ void PairSurfGranular::corners2norm(double *corners, double *norm)
   MathExtra::sub3(&corners[0],&corners[6],p13);
   MathExtra::cross3(p12,p13,norm);
   MathExtra::norm3(norm);
-}
-
-/* ----------------------------------------------------------------------
-   compute nearest point between sphere I and triangle J
-   return 0 if no contact, 1 if pt is interior to triangle,
-     -1/-2/-3 if pt on tri edges, -4/-5/-6 if pt = tri corners 1/2/3
-   if contact, return:
-     pt = point on triangle
-     r = vector from pt to sphere center
-     rsq = squared length of r
-   based on geometry.cpp::distsq_point_tri() in SPARTA
-------------------------------------------------------------------------- */
-
-int PairSurfGranular::overlap_sphere_tri(int i, int j, double *pt,
-                                                double *r, double &rsq)
-{
-  int e12flag,e23flag,e31flag,o12flag,o23flag,o31flag;
-  int esum,osum,lineflag;
-  double dot;
-  double *p1,*p2,*p3,*norm;
-  double a[3],point[3],edge[3],pvec[3],xproduct[3];
-
-  // P1,P2,P3 = corner points of triangle
-  // norm = current norm of triangle
-
-  double *corner = corners[atom->tri[j]];
-
-  p1 = &corner[0];
-  p2 = &corner[3];
-  p3 = &corner[6];
-  norm = &corner[9];
-
-  // A = vector from P1 to Xsphere
-
-  double *xsphere = atom->x[i];
-  MathExtra::sub3(xsphere,p1,a);
-
-  // pt = projected point on infinite triangle plane
-
-  double alpha = MathExtra::dot3(a,norm);
-  pt[0] = xsphere[0] - alpha*norm[0];
-  pt[1] = xsphere[1] - alpha*norm[1];
-  pt[2] = xsphere[2] - alpha*norm[2];
-
-  // test if projected point is inside triangle
-  // inside = interior + boundary of tri
-  // edge = edge vector of triangle
-  // pvec = vector from triangle vertex to projected point
-  // xproduct = cross product of edge with pvec
-  // if dot product of xproduct with norm < 0.0 for any of 3 edges,
-  //   projected point is outside tri
-  // NOTE: worry about round-off for pt being on edge or corner?
-
-  int inside = 1;
-  e12flag = e23flag = e31flag = 0;
-  o12flag = o23flag = o31flag = 0;
-
-  MathExtra::sub3(p2,p1,edge);
-  MathExtra::sub3(pt,p1,pvec);
-  MathExtra::cross3(edge,pvec,xproduct);
-  dot = MathExtra::dot3(xproduct,norm);
-  if (dot <= 0.0) {
-    o12flag = 1;
-    if (dot == 0.0) e12flag = 1;
-    else inside = 0;
-  }
-
-  MathExtra::sub3(p3,p2,edge);
-  MathExtra::sub3(pt,p2,pvec);
-  MathExtra::cross3(edge,pvec,xproduct);
-  dot = MathExtra::dot3(xproduct,norm);
-  if (dot <= 0.0) {
-    o23flag = 1;
-    if (dot == 0.0) e23flag = 2;
-    else inside = 0;
-  }
-
-  MathExtra::sub3(p1,p3,edge);
-  MathExtra::sub3(pt,p3,pvec);
-  MathExtra::cross3(edge,pvec,xproduct);
-  dot = MathExtra::dot3(xproduct,norm);
-  if (dot <= 0.0) {
-    o31flag = 1;
-    if (dot == 0.0) e31flag = 3;
-    else inside = 0;
-  }
-
-  // projected point is inside tri = interior or boundary
-  // set ptflag = 1 for interior
-  // set ptflag = -1,-2,-3 for 3 edges E12,E23,E31
-  // set ptflag = -4,-5,-6 for 3 corner pts P1,P2,P3
-
-  int flag = 0;
-  if (inside) {
-    flag = 1;
-    esum = e12flag + e23flag + e31flag;
-    if (esum) {
-      if (esum == 1) {
-        if (e12flag) flag = -1;
-        else if (e23flag) flag = -2;
-        else flag = -3;
-      } else {
-        if (!e12flag) flag = -6;
-        else if (!e23flag) flag = -4;
-        else flag = -5;
-      }
-    }
-
-  // projected point is outside tri
-  // reset pt to nearest point to tri center
-  // set ptflag = -1,-2,-3 if pt on edges
-  // set ptflag = -4,-5,-6 if pt = corner pts
-
-  } else {
-    osum = o12flag + o23flag + o31flag;
-    if (osum == 1) {
-      if (o12flag) {
-        lineflag = nearest_point_line(xsphere,p1,p2,pt);
-        if (lineflag == 1) flag = -1;
-        else if (lineflag == -1) flag = -4;
-        else flag = -5;
-      } else if (o23flag) {
-        lineflag = nearest_point_line(xsphere,p2,p3,pt);
-        if (lineflag == 1) flag = -2;
-        else if (lineflag == -1) flag = -5;
-        else flag = -6;
-      } else {
-        lineflag = nearest_point_line(xsphere,p3,p1,pt);
-        if (lineflag == 1) flag = -3;
-        else if (lineflag == -1) flag = -6;
-        else flag = -4;
-      }
-    } else {
-      if (!o12flag) {
-        flag = -6;
-        pt[0] = p3[0];
-        pt[1] = p3[1];
-        pt[2] = p3[2];
-      } else if (!o23flag) {
-        flag = -4;
-        pt[0] = p1[0];
-        pt[1] = p1[1];
-        pt[2] = p1[2];
-      } else {
-        flag = -5;
-        pt[0] = p2[0];
-        pt[1] = p2[1];
-        pt[2] = p2[2];
-      }
-    }
-  }
-
-  // test if point is exactly a corner pt
-  // if so, reset ptwhich to corner pt
-
-  /*
-  if (pt[0] == p1[0] && pt[1] == p1[1] && pt[2] == p1[2]) flag == -4;
-  else if (pt[0] == p2[0] && pt[1] == p2[1] && pt[2] == p2[2]) flag == -5;
-  else if (pt[0] == p3[0] && pt[1] == p3[1] && pt[2] == p3[2]) flag == -6;
-  */
-
-  // R = vector from nearest pt on line to Xsphere center
-  // return flag if len(R) < sphere radius
-  // else no contact, return 0
-
-  double radsq = atom->radius[i] * atom->radius[i];
-  MathExtra::sub3(xsphere,pt,r);
-  rsq = MathExtra::lensq3(r);
-  if (rsq < radsq) return flag;
-  return 0;
-}
-
-/* ----------------------------------------------------------------------
-   compute nearest point between point X and line segment P1 to P2
-   return pt = nearest point within line segment
-   return 1 if pt is interior to line segment
-   return -1/-2 if pt = line segment end point 1/2
-   based on geometry.cpp::distsq_point_line() in SPARTA
-------------------------------------------------------------------------- */
-
-int PairSurfGranular::nearest_point_line(double *x,
-                                                double *p1, double *p2,
-                                                double *pt)
-{
-  double a[3],b[3];
-
-  // A = vector from P1 to X
-  // B = vector from P1 to P2
-
-  MathExtra::sub3(x,p1,a);
-  MathExtra::sub3(p2,p1,b);
-
-  // alpha = fraction of distance from P1 to P2 that P is located at
-  // P = projected point on infinite line that is nearest to X
-  // alpha can be any value
-
-  double alpha = MathExtra::dot3(a,b) / MathExtra::lensq3(b);
-
-  // pt = point on line segment that is nearest to X
-  // if alpha <= 0.0, pt = P1, ptflag = -1
-  // if alpha >= 1.0, pt = P2, ptflag = -2
-  // else pt = P1 + alpha*(P2-P1), ptflag = 1
-
-  int ptflag;
-  if (alpha <= 0.0) {
-    ptflag = -1;
-    pt[0] = p1[0];
-    pt[1] = p1[1];
-    pt[2] = p1[2];
-  } else if (alpha >= 1.0) {
-    ptflag = -2;
-    pt[0] = p2[0];
-    pt[1] = p2[1];
-    pt[2] = p2[2];
-  } else {
-    ptflag = 1;
-    pt[0] = p1[0] + alpha*b[0];
-    pt[1] = p1[1] + alpha*b[1];
-    pt[2] = p1[2] + alpha*b[2];
-  }
-
-  return ptflag;
-}
-
-/* ----------------------------------------------------------------------
-   check overlap status of sphere I with tri J versus any neighbor tris K
-   I overlaps J at jflag = -1,-2,-3 for three edges
-   return 0 if this tri J performs computation
-   return 1 if other tri K performs computation
-------------------------------------------------------------------------- */
-
-int PairSurfGranular::edge_neigh_check(int i, int j, int jflag)
-{
-  // ncheck = # of neighbor tris to check
-  // neighs = indices of neighbor tris (including self)
-
-  int ncheck;
-  int *neighs;
-
-  int jc = atom->tri[j];
-  if (jflag == -1) {
-    if (connect3d[jc].ne1 == 1) return 0;
-    ncheck = connect3d[jc].ne1;
-    neighs = connect3d[jc].neigh_e1;
-  } else if (jflag == -2) {
-    if (connect3d[jc].ne2 == 1) return 0;
-    ncheck = connect3d[jc].ne2;
-    neighs = connect3d[jc].neigh_e2;
-  } else if (jflag == -3) {
-    if (connect3d[jc].ne3 == 1) return 0;
-    ncheck = connect3d[jc].ne3;
-    neighs = connect3d[jc].neigh_e3;
-  }
-
-  // check overlap with each neighbor tri
-  // if any tri has interior overlap, another tri computes
-  // if all tris have edge overlap, tri with lowest ID computes
-  // kflag = overlap status with neighbor tri
-  // kflag = 1, interior overlap
-  // kflag = 0, no overlap, should not be possible
-  // kflag < 0, overlap at edge (overlap at corner pt should not be possible)
-
-  tagint *tag = atom->tag;
-
-  int k,kflag;
-  double rsq;
-  double dr[3],contact[3];
-
-  tagint trimin = tag[j];
-
-  for (int m = 0; m < ncheck; m++) {
-    if (neighs[m] == tag[j]) continue;     // skip self tri
-    k = atom->map(neighs[m]);
-    if (k < 0) error->one(FLERR,"Pair surf/granular neighbor tri is missing");
-    kflag = overlap_sphere_tri(i,k,contact,dr,rsq);
-    if (kflag > 0) return 1;
-    if (kflag == 0) error->one(FLERR,"Pair surf/granular neighbor tri overlap is invalid");
-    trimin = MIN(trimin,tag[k]);
-  }
-
-  if (tag[j] == trimin) return 0;
-  return 1;
-}
-
-/* ----------------------------------------------------------------------
-   check overlap status of sphere I with tri J versus any neighbor tris K
-   I overlaps J at jflag = -4,-5,-6 for three corners
-   return 0 if this tri J performs computation
-   return 1 if some other tri K performs computation
-------------------------------------------------------------------------- */
-
-int PairSurfGranular::corner_neigh_check(int i, int j, int jflag)
-{
-  // ncheck = # of neighbor tris to check
-  // neighs = indices of neighbor tris (including self)
-
-  int ncheck;
-  int *neighs;
-
-  int jc = atom->tri[j];
-  if (jflag == -4) {
-    if (connect3d[jc].nc1 == 1) return 0;
-    ncheck = connect3d[jc].nc1;
-    neighs = connect3d[jc].neigh_c1;
-  } else if (jflag == -5) {
-    if (connect3d[jc].nc2 == 1) return 0;
-    ncheck = connect3d[jc].nc2;
-    neighs = connect3d[jc].neigh_c2;
-  } else if (jflag == -6) {
-    if (connect3d[jc].nc3 == 1) return 0;
-    ncheck = connect3d[jc].nc3;
-    neighs = connect3d[jc].neigh_c3;
-  }
-
-  // check overlap with each neighbor tri
-  // if any tri has interior or edge overlap, another tri computes
-  // if all tris have corner pt overlap, tri with lowest ID computes
-  // kflag = overlap status with neighbor tri
-  // kflag = 1, interior overlap
-  // kflag = 0, no overlap, should not be possible
-  // kflag = -1/-2/-3, overlap at edge
-  // kflag = -4/-5/-6, overlap at corner pt
-
-  tagint *tag = atom->tag;
-
-  int k,kflag;
-  double rsq;
-  double dr[3],contact[3];
-
-  tagint trimin = tag[j];
-
-  for (int m = 0; m < ncheck; m++) {
-    if (neighs[m] == tag[j]) continue;     // skip self tri
-    k = atom->map(neighs[m]);
-    if (k < 0) error->one(FLERR,"Pair surf/granular neighbor tri is missing");
-    kflag = overlap_sphere_tri(i,k,contact,dr,rsq);
-    if (kflag > 0) return 1;
-    if (kflag == 0) error->one(FLERR,"Pair surf/granular neighbor tri overlap is invalid");
-    if (kflag >= -3) return 1;
-    trimin = MIN(trimin,tag[k]);
-  }
-
-  if (tag[j] == trimin) return 0;
-  return 1;
 }
