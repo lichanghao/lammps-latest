@@ -173,13 +173,6 @@ class FixSurfaceGlobal : public Fix {
 
   // private methods
 
-  int overlap_sphere_line(int, int, double *, double *, double &);
-  int endpt_neigh_check(int, int, int);
-  int overlap_sphere_tri(int, int, double *, double *, double &);
-  int nearest_point_line(double *, double *, double *, double *);
-  int edge_neigh_check(int, int, int);
-  int corner_neigh_check(int, int, int);
-
   void extract_from_molecules(char *);
   void extract_from_stlfile(char *);
   void connectivity2d_global();
