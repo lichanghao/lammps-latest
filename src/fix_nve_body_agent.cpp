@@ -16,6 +16,7 @@
    Agent-based simulation for bacteria biofilms
    Author: Changhao Li (changhaoli1997@gmail.com)
    Status: under development. Need to fix the bond hash map problem
+   Last updated: 11/12/2024
 ------------------------------------------------------------------------- */
 
 #include <cmath>
@@ -42,7 +43,7 @@ using namespace FixConst;
 FixNVEBodyAgent::FixNVEBodyAgent(LAMMPS *lmp, int narg, char **arg) :
   FixNVE(lmp, narg, arg) 
 {
-  
+  read_params(narg, arg);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -461,9 +462,87 @@ void FixNVEBodyAgent::copy_atom(int ibody, int jbody)
   #endif
 }
 
+/* ----------------------------------------------------------------------
+  read LAMMPS fix parameters from input script
+------------------------------------------------------------------------- */
+void FixNVEBodyAgent::read_params(int narg, char **arg)
+{
+  // default values
+  growth_rate = 0;
+  growth_standard_dev = 0;
+  L_max = 0;
+  nu_0 = 0;
+  kLH = 0;
+  kHL = 0;
+  noise_level = 1e-8;
+  coeff_nu_0_xy = 1;
+  coeff_nu_0_z = 1;
+  z_damp_height = 0;
+
+  if (narg != 3 && narg != 6 && narg != 8 && narg != 10 && narg != 12 && 
+      narg != 14 && narg != 16 && narg != 18 && narg != 20 && narg != 22) {
+    error->all(FLERR, "Invalid fix nve/body/agent command, incorrect number of input parameters");
+  }
+
+  // read values from LAMMPS input file
+  for (int i = 0; i < narg - 1; i++)
+  {
+    if (strcmp(arg[i], "grow") == 0)
+    {
+      growth_rate = utils::numeric(FLERR, arg[i + 1], false, lmp);
+      growth_standard_dev = utils::numeric(FLERR, arg[i + 2], false, lmp);
+    }
+    if (strcmp(arg[i], "maxlen") == 0)
+    {
+      L_max = utils::numeric(FLERR, arg[i + 1], false, lmp);
+    }
+    if (strcmp(arg[i], "damp") == 0)
+    {
+      nu_0 = utils::numeric(FLERR, arg[i + 1], false, lmp);
+    }
+    if (strcmp(arg[i], "noise") == 0)
+    {
+      noise_level = utils::numeric(FLERR, arg[i + 1], false, lmp);
+    }
+    if (strcmp(arg[i], "kLH") == 0)
+    {
+      kLH = utils::numeric(FLERR, arg[i + 1], false, lmp);
+    }
+    if (strcmp(arg[i], "kHL") == 0)
+    {
+      kHL = utils::numeric(FLERR, arg[i + 1], false, lmp);
+    }
+    if (strcmp(arg[i], "c_nu_0_xy") == 0)
+    {
+      coeff_nu_0_xy = utils::numeric(FLERR, arg[i + 1], false, lmp);
+    }
+    if (strcmp(arg[i], "c_nu_0_z") == 0)
+    {
+      coeff_nu_0_z = utils::numeric(FLERR, arg[i + 1], false, lmp);
+    }
+    if (strcmp(arg[i], "z_damp_height") == 0)
+    {
+      z_damp_height = utils::numeric(FLERR, arg[i + 1], false, lmp);
+    }
+  }
+
+  printf("\n------------------ Fix_NVE_Body_Agent Parameters ------------------\n");
+  printf("growth_rate = %f\n", growth_rate);
+  printf("growth_standard_dev = %f\n", growth_standard_dev);
+  printf("L_max = %f\n", L_max);
+  printf("nu_0 = %f\n", nu_0);
+  printf("noise_level (normalized by 1e-8) = %f\n", noise_level/1e-8);
+  printf("kLH = %f\n", kLH);
+  printf("kHL = %f\n", kHL);
+  printf("coeff_nu_0_xy = %f\n", coeff_nu_0_xy);
+  printf("coeff_nu_0_z = %f\n", coeff_nu_0_z);
+  printf("z_damp_height = %f\n", z_damp_height);
+  printf("-------------------------------------------------------------------\n\n");
+}
+
 
 /* ----------------------------------------------------------------------
-   maxtag_all = current max atom ID for all atoms
+  maxtag_all = current max atom ID for all atoms
 ------------------------------------------------------------------------- */
 
 // void FixNVEBodyAgent::find_maxid()

@@ -1173,6 +1173,7 @@ int PairBodyRoundedPolyhedronAgent::interaction_edge_to_edge(int ibody,
 
   int jflag = 1;
   // distance_bt_edges(xpj1, xpj2, xi1, xi2, h1, h2, t1, t2, r);
+  // Changhao modification: fixed the bug in the original LAMMPS code where end-to-end contact is not correctly addressed
   distance_bt_edges_new(xpj1, xpj2, xi1, xi2, h1, h2, t1, t2, r);
 
   #ifdef _POLYHEDRON_DEBUG
@@ -1550,6 +1551,8 @@ void PairBodyRoundedPolyhedronAgent::pair_force_and_torque(int ibody, int jbody,
 /* ----------------------------------------------------------------------
   Kernel force is model-dependent and can be derived for other styles
     here is the harmonic potential (linear piece-wise forces) in Wang et al.
+  Modified by Changhao: add the hard-core potential to prevent penetration 
+    under high stresses
 ------------------------------------------------------------------------- */
 
 void PairBodyRoundedPolyhedronAgent::kernel_force(double R, int itype, int jtype,
