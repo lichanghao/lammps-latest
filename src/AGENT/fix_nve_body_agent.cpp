@@ -18,6 +18,7 @@
    Status: under development. Need to fix the bond hash map problem
 ------------------------------------------------------------------------- */
 
+#include <cmath>
 #include "fix_nve_body_agent.h"
 #include "math_extra.h"
 #include "atom.h"
@@ -27,6 +28,9 @@
 
 using namespace LAMMPS_NS;
 using namespace FixConst;
+
+#define FIX_NVE_BODY_AGENT_DEBUG
+#define DEBUG_INTERVAL 4000
 
 /* ---------------------------------------------------------------------- */
 
@@ -108,7 +112,7 @@ void FixNVEBodyAgent::initial_integrate(int /*vflag*/)
       apply_damping_force(i, omega, f, torque);
       
       // apply infinitesimal noise (1e-8)
-      add_noise(f[i], angmom[i], 1e-8);
+      add_noise(f[i], torque[i], 1e-8);
 
       // update velocity by full step, displacement by 1/2 step
       v[i][0] += dtfm * f[i][0];
@@ -139,7 +143,7 @@ void FixNVEBodyAgent::initial_integrate(int /*vflag*/)
 ---------------------------------------------------------------------- */
 
 void FixNVEBodyAgent::pre_exchange()
-{
+{ 
   int *mask = atom->mask;
   int nlocal = atom->nlocal;
 
@@ -159,7 +163,7 @@ void FixNVEBodyAgent::pre_exchange()
     atom->map_init(1);
     atom->map_set();
   }
-  next_reneighbor = update->ntimestep + 50;
+  next_reneighbor = update->ntimestep + 1;
 }
 
 
@@ -281,6 +285,10 @@ void FixNVEBodyAgent::grow_single_body(int ibody, double growth_rate)
   bonus[body[ibody]].dvalue[6+2] *= length_ratio; // enclosing radius (not rounded radius)
 
   // mass and rotational inertia are currently neglected, because the model is running under overdamped settings
+  rmass[ibody] *= growth_ratio;                   // mass ~ V
+  for (int j = 0; j < 3; j++) {
+    bonus[body[ibody]].inertia[j] *= pow(growth_ratio, 3); // rotational inertia ~ m*L^2
+  }
 }
 
 
@@ -327,17 +335,29 @@ void FixNVEBodyAgent::apply_damping_force(int ibody, double *omega, double **f, 
   double L = length(bonus[body[ibody]].dvalue);
   double R = radius(bonus[body[ibody]].dvalue, 2);
 
-  double temp_nu_0 = 10;
+  double temp_nu_0 = 1;
 
   // adding damping force, applying on mass center
-  f[ibody][0] += -temp_nu_0 * (L+4/3*R) * v[0];
-  f[ibody][1] += -temp_nu_0 * (L+4/3*R) * v[1];
-  f[ibody][2] += -temp_nu_0 * (L+4/3*R) * v[2];
+  f[ibody][0] += -temp_nu_0 * (L+4.0/3.0*R) * v[0];
+  f[ibody][1] += -temp_nu_0 * (L+4.0/3.0*R) * v[1];
+  f[ibody][2] += -temp_nu_0 * (L+4.0/3.0*R) * v[2];
 
   // adding damping moment
-  torque[ibody][0] += -1.0 / 6.0 * temp_nu_0 * omega[0] * pow(L+4/3*R, 3);
-  torque[ibody][1] += -1.0 / 6.0 * temp_nu_0 * omega[1] * pow(L+4/3*R, 3);
-  torque[ibody][2] += -1.0 / 6.0 * temp_nu_0 * omega[2] * pow(L+4/3*R, 3);
+  torque[ibody][0] += -1.0 / 6.0 * temp_nu_0 * omega[0] * std::pow(L+4.0/3.0*R, 3);
+  torque[ibody][1] += -1.0 / 6.0 * temp_nu_0 * omega[1] * std::pow(L+4.0/3.0*R, 3);
+  torque[ibody][2] += -1.0 / 6.0 * temp_nu_0 * omega[2] * std::pow(L+4.0/3.0*R, 3);
+  
+  // debug code
+  #ifdef FIX_NVE_BODY_AGENT_DEBUG
+  if (update->ntimestep % DEBUG_INTERVAL == 0) {
+    printf("apply_daping_force for body %d\n", ibody);
+    printf("damping moment: %f %f %f\n", torque[ibody][0], torque[ibody][1], torque[ibody][2]);
+    printf("damping force: %f %f %f\n", f[ibody][0], f[ibody][1], f[ibody][2]);
+    printf("omega: %f %f %f\n", omega[0], omega[1], omega[2]);
+    printf("inertia: %f %f %f\n", bonus[body[ibody]].inertia[0], bonus[body[ibody]].inertia[1], bonus[body[ibody]].inertia[2]);
+    
+  }
+  #endif
 }
 
 
@@ -372,7 +392,7 @@ double FixNVEBodyAgent::radius(double *data, int nvert)
 
 double FixNVEBodyAgent::length(double *data)
 {
-  return sqrt(pow(data[3] - data[0], 2) + pow(data[4] - data[1], 2) + pow(data[5] - data[2], 2));
+  return sqrt(std::pow(data[3] - data[0], 2) + std::pow(data[4] - data[1], 2) + std::pow(data[5] - data[2], 2));
 }
 
 
@@ -396,7 +416,8 @@ void FixNVEBodyAgent::set_force(int ibody, double fx, double fy, double fz, doub
 
 /* ----------------------------------------------------------------------
   copy the atom information from ibody to jbody
-  tag is not copied!
+  tag is not copied and initialized as 0
+  tag needs to be specially taken care of, especially under parallel settings
 ---------------------------------------------------------------------- */
 
 void FixNVEBodyAgent::copy_atom(int ibody, int jbody)
@@ -416,6 +437,13 @@ void FixNVEBodyAgent::copy_atom(int ibody, int jbody)
   atom->angmom[jbody][0] = atom->angmom[ibody][0];
   atom->angmom[jbody][1] = atom->angmom[ibody][1];
   atom->angmom[jbody][2] = atom->angmom[ibody][2];
+
+  // debug code
+  #ifdef FIX_NVE_BODY_AGENT_DEBUG
+  printf("copy_atom() from %d to %d\n", ibody, jbody);
+  printf("velocity: %f %f %f\n", atom->v[jbody][0], atom->v[jbody][1], atom->v[jbody][2]);
+  printf("angular momentum: %f %f %f\n", atom->angmom[jbody][0], atom->angmom[jbody][1], atom->angmom[jbody][2]);
+  #endif
 }
 
 

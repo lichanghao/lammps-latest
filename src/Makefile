@@ -49,6 +49,7 @@ endif
 # PACKEXT    = subset that require an external (downloaded) library
 
 PACKAGE = \
+	agent \
 	molecule \
 	kspace \
 	adios \
