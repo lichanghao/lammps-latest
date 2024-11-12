@@ -29,8 +29,13 @@
 using namespace LAMMPS_NS;
 using namespace FixConst;
 
-#define FIX_NVE_BODY_AGENT_DEBUG
-#define DEBUG_INTERVAL 4000
+#define INITIAL_MASS 1e-3
+#define INITIAL_INERTIA_x 5e-4
+#define INITIAL_INERTIA_y 1.2708e-3
+#define INITIAL_INERTIA_z 1.2708e-3
+
+// #define FIX_NVE_BODY_AGENT_DEBUG
+// #define DEBUG_INTERVAL 4000
 
 /* ---------------------------------------------------------------------- */
 
@@ -252,6 +257,16 @@ void FixNVEBodyAgent::proliferate_single_body(int ibody)
     // ensure they are in equilibrium
     set_force(ibody, 0, 0, 0, 0, 0, 0);
     set_force(new_body_index, 0, 0, 0, 0, 0, 0);
+
+    // reset the mass and rotational inertia
+    rmass[new_body_index] = INITIAL_MASS;
+    rmass[ibody] = INITIAL_MASS;
+    bonus[body[ibody]].inertia[0] = INITIAL_INERTIA_x;
+    bonus[body[ibody]].inertia[1] = INITIAL_INERTIA_y;
+    bonus[body[ibody]].inertia[2] = INITIAL_INERTIA_z;
+    bonus[body[new_body_index]].inertia[0] = INITIAL_INERTIA_x;
+    bonus[body[new_body_index]].inertia[1] = INITIAL_INERTIA_y;
+    bonus[body[new_body_index]].inertia[2] = INITIAL_INERTIA_z;
   }
 }
 
@@ -440,7 +455,7 @@ void FixNVEBodyAgent::copy_atom(int ibody, int jbody)
 
   // debug code
   #ifdef FIX_NVE_BODY_AGENT_DEBUG
-  printf("copy_atom() from %d to %d\n", ibody, jbody);
+  printf("copy_atom() from local index %d to %d\n", ibody, jbody);
   printf("velocity: %f %f %f\n", atom->v[jbody][0], atom->v[jbody][1], atom->v[jbody][2]);
   printf("angular momentum: %f %f %f\n", atom->angmom[jbody][0], atom->angmom[jbody][1], atom->angmom[jbody][2]);
   #endif
