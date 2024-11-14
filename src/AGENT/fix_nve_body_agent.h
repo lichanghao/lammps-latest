@@ -27,6 +27,7 @@ namespace LAMMPS_NS {
 class FixNVEBodyAgent : public FixNVE {
  public:
   FixNVEBodyAgent(class LAMMPS *, int, char **);
+  ~FixNVEBodyAgent() override;
   void init() override;
   int setmask() override;
   void initial_integrate(int) override;
@@ -35,6 +36,7 @@ class FixNVEBodyAgent : public FixNVE {
 
  private:
   double dtq;                    // timestep length
+  int nmax;                      // recorded maximum number of atoms
   double growth_rate;            // expectation of growth rate, unit is 1/[T]
   double growth_standard_dev;    // standard derivation of growth rate
   double L_max;                  // maximum length for proliferation
@@ -46,7 +48,10 @@ class FixNVEBodyAgent : public FixNVE {
   double coeff_nu_0_z;           // z_direction fold of env viscosity difference
   double z_damp_height;          // apply nu_0 difference above this height
 
+  double *growth_rates_all;      // peratom vector for growth rates
+
   class AtomVecBody *avec;
+  class RanPark *random;         // random generator
 
   void grow_single_body(int, double);                                         // grow a single cell in a given timestep
   void proliferate_single_body(int);                                          // check length and proliferate a cell             
@@ -59,7 +64,15 @@ class FixNVEBodyAgent : public FixNVE {
   void add_noise(double*, double*, double);                                   // add random noise to force and moment vectors
   void copy_atom(int, int);                                                   // copy atom information from local index i to j
 
-  void read_params(int, char **);                                                         // read parameters from input script
+  double memory_usage() override;                                             // return memory usage of this fix
+  void grow_arrays(int) override;                                             // grow arrays for peratom vector
+  void copy_arrays(int, int, int) override;                                   // copy per-atom information from one to another, for parallel settings
+  void set_arrays(int) override;                                              // set per-atom information for a new atom, for parallel settings           
+  int pack_exchange(int, double *) override;                                  // pack per-atom information for parallel settings
+  int unpack_exchange(int, double *) override;                                // unpack per-atom information for parallel settings
+
+
+  void read_params(int, char **);                                             // read parameters from input script
 //   void find_maxid();
 };
 

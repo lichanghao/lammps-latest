@@ -780,14 +780,21 @@ void Domain::pbc()
 
   // verify owned atoms have valid numerical coords
   // may not if computed pairwise force between 2 atoms at same location
+  // modified by Changhao: added some print statements for debugging
 
   double *coord;
   int n3 = 3*nlocal;
   coord = &x[0][0];
   int flag = 0;
   for (i = 0; i < n3; i++)
-    if (!std::isfinite(*coord++)) flag = 1;
-  if (flag) error->one(FLERR,"Non-numeric atom coords - simulation unstable");
+    if (!std::isfinite(*coord++)) {flag = 1; printf("i = %d, coord= %f\n", i, *(coord-1));}
+  if (flag) {
+    printf("current timestep: %d\n", update->ntimestep);
+    for (int i = 0; i < atom->nlocal; i++) {
+      printf("image flags of the %d-th atom: %d\n", i, image[i]);
+    }
+    error->one(FLERR,"Non-numeric atom coords - simulation unstable");
+  }
 
   // setup for PBC checks
 

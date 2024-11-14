@@ -26,24 +26,52 @@
 #include "atom_vec_body.h"
 #include "error.h"
 #include "update.h"
+#include "memory.h"
+#include "random_park.h"
 
 using namespace LAMMPS_NS;
 using namespace FixConst;
 
 #define INITIAL_MASS 1e-3
 #define INITIAL_INERTIA_x 5e-4
-#define INITIAL_INERTIA_y 1.2708e-3
-#define INITIAL_INERTIA_z 1.2708e-3
+#define INITIAL_INERTIA_y 1.2708e-4
+#define INITIAL_INERTIA_z 1.2708e-4
+#define RANDOM_SEED 1
+#define FORCE_RENEIGHBOR_INTERVAL 10
 
 // #define FIX_NVE_BODY_AGENT_DEBUG
-// #define DEBUG_INTERVAL 4000
+// #define DEBUG_INTERVAL 2000
 
 /* ---------------------------------------------------------------------- */
 
 FixNVEBodyAgent::FixNVEBodyAgent(LAMMPS *lmp, int narg, char **arg) :
   FixNVE(lmp, narg, arg) 
-{
+{ 
+  // set fix parent class tags
+  peratom_flag = 1;
+  size_peratom_cols = 0;
+  peratom_freq = 1;
+  time_integrate = 1;
+
+  // read parameters from input files
   read_params(narg, arg);
+
+  // random generator
+  random = new RanPark(lmp, RANDOM_SEED);
+
+  // initiate peratom vector for growth rates, Gaussian distribution ~ N(growth_rate, growth_standard_dev)
+  nmax = atom->nmax;
+  grow_arrays(nmax);
+  int *mask = atom->mask;
+  int nlocal = atom->nlocal;
+  for (int i = 0; i < nlocal; i++) {
+    if (mask[i] & groupbit)
+      growth_rates_all[i] = random->gaussian() * growth_standard_dev + growth_rate;
+  }
+  atom->add_callback(Atom::GROW);
+
+  // initiate the image flag for all atoms as 0, because somehow the original body package did not do it
+  for (int i = 0; i < nlocal; i++) atom->image[i] = 0;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -72,6 +100,15 @@ void FixNVEBodyAgent::init()
 
 /* ---------------------------------------------------------------------- */
 
+FixNVEBodyAgent::~FixNVEBodyAgent()
+{
+  delete random;
+  atom->delete_callback(id, Atom::GROW);
+  memory->destroy(growth_rates_all);
+}
+
+/* ---------------------------------------------------------------------- */
+
 int FixNVEBodyAgent::setmask()
 {
   int mask = 0;
@@ -82,7 +119,7 @@ int FixNVEBodyAgent::setmask()
 }
 
 /* ---------------------------------------------------------------------- 
-  do the first half verlet integration, apply damping and noise
+  do the first half of verlet integration, apply damping and noise
 ---------------------------------------------------------------------- */
 
 void FixNVEBodyAgent::initial_integrate(int /*vflag*/)
@@ -129,7 +166,6 @@ void FixNVEBodyAgent::initial_integrate(int /*vflag*/)
       x[i][2] += dtv * v[i][2];
 
       // update angular momentum by 1/2 step
-
       angmom[i][0] += dtf * torque[i][0];
       angmom[i][1] += dtf * torque[i][1];
       angmom[i][2] += dtf * torque[i][2];
@@ -137,9 +173,8 @@ void FixNVEBodyAgent::initial_integrate(int /*vflag*/)
       // compute omega at 1/2 step from angmom at 1/2 step and current q
       // update quaternion a full step via Richardson iteration
       // returns new normalized quaternion
-
-      MathExtra::mq_to_omega(angmom[i],quat,inertia,omega);
-      MathExtra::richardson(quat,angmom[i],omega,inertia,dtq);
+      MathExtra::mq_to_omega(angmom[i], quat, inertia, omega);
+      MathExtra::richardson(quat, angmom[i], omega, inertia, dtq);
     }
 }
 
@@ -169,7 +204,16 @@ void FixNVEBodyAgent::pre_exchange()
     atom->map_init(1);
     atom->map_set();
   }
-  next_reneighbor = update->ntimestep + 1;
+
+  // force reneighboring by given interval
+  next_reneighbor = update->ntimestep + FORCE_RENEIGHBOR_INTERVAL;
+
+  // reallocate the per-atom vector if nmax is changed
+  if (nmax < atom->nmax) {
+    memory->destroy(growth_rates_all);
+    nmax = atom->nmax;
+    grow_arrays(nmax);
+  }
 }
 
 
@@ -201,7 +245,7 @@ void FixNVEBodyAgent::final_integrate()
       angmom[i][1] += dtf * torque[i][1];
       angmom[i][2] += dtf * torque[i][2];
 
-      grow_single_body(i, 1);
+      grow_single_body(i, growth_rates_all[i]);
     }
 }
 
@@ -222,9 +266,10 @@ void FixNVEBodyAgent::proliferate_single_body(int ibody)
   double *p = bonus[body[ibody]].dvalue;
   double L = length(p);                             // length of the rod
   double r = radius(p, 2);                          // rounded radius of the rod
-  if (L >= 3.0) {
+  if (L >= L_max) {
     // calculate new center locations of two daughter bodies
     // c1 is the relative displacements of the first daughter body, c2 is the second
+    printf("proliferating the cell %d, current timestep: %d\n", ibody, update->ntimestep);
     double temp[6];
     for (int j = 0; j < 6; j++)
       temp[j] = bonus[body[ibody]].dvalue[j] * (L / 2 + r) / L;
@@ -254,6 +299,7 @@ void FixNVEBodyAgent::proliferate_single_body(int ibody)
     {
       x[new_body_index][j] = x_old[j] + c2[j];      // set up the center location of the second daughter body
     }
+    growth_rates_all[new_body_index] = random->gaussian() * growth_standard_dev + growth_rate;  // set up the growth rate for the new cell
 
     // ensure they are in equilibrium
     set_force(ibody, 0, 0, 0, 0, 0, 0);
@@ -351,7 +397,7 @@ void FixNVEBodyAgent::apply_damping_force(int ibody, double *omega, double **f, 
   double L = length(bonus[body[ibody]].dvalue);
   double R = radius(bonus[body[ibody]].dvalue, 2);
 
-  double temp_nu_0 = 1;
+  double temp_nu_0 = nu_0;
 
   // adding damping force, applying on mass center
   f[ibody][0] += -temp_nu_0 * (L+4.0/3.0*R) * v[0];
@@ -366,12 +412,11 @@ void FixNVEBodyAgent::apply_damping_force(int ibody, double *omega, double **f, 
   // debug code
   #ifdef FIX_NVE_BODY_AGENT_DEBUG
   if (update->ntimestep % DEBUG_INTERVAL == 0) {
-    printf("apply_daping_force for body %d\n", ibody);
+    printf("apply_damping_force for body %d\n", ibody);
     printf("damping moment: %f %f %f\n", torque[ibody][0], torque[ibody][1], torque[ibody][2]);
     printf("damping force: %f %f %f\n", f[ibody][0], f[ibody][1], f[ibody][2]);
     printf("omega: %f %f %f\n", omega[0], omega[1], omega[2]);
     printf("inertia: %f %f %f\n", bonus[body[ibody]].inertia[0], bonus[body[ibody]].inertia[1], bonus[body[ibody]].inertia[2]);
-    
   }
   #endif
 }
@@ -457,14 +502,78 @@ void FixNVEBodyAgent::copy_atom(int ibody, int jbody)
   // debug code
   #ifdef FIX_NVE_BODY_AGENT_DEBUG
   printf("copy_atom() from local index %d to %d\n", ibody, jbody);
+  printf("location: %f %f %f\n", atom->x[jbody][0], atom->x[jbody][1], atom->x[jbody][2]);
+  printf("image flag: %d\n", atom->image[jbody]);
   printf("velocity: %f %f %f\n", atom->v[jbody][0], atom->v[jbody][1], atom->v[jbody][2]);
   printf("angular momentum: %f %f %f\n", atom->angmom[jbody][0], atom->angmom[jbody][1], atom->angmom[jbody][2]);
   #endif
 }
 
+
+/* ----------------------------------------------------------------------
+  grow peratom arrays for cell-wise growth rates, etc.
+------------------------------------------------------------------------- */
+
+void FixNVEBodyAgent::grow_arrays(int n)
+{
+  memory->create(growth_rates_all, n, "fix/nve/body/agent:growth_rates_all");
+  vector_atom = growth_rates_all;
+}
+
+/* ----------------------------------------------------------------------
+   memory usage of local atom-based array
+------------------------------------------------------------------------- */
+
+double FixNVEBodyAgent::memory_usage()
+{
+  double bytes = (double) atom->nmax * 1 * sizeof(double);
+  return bytes;
+}
+
+/* ----------------------------------------------------------------------
+   copy values within local atom-based array
+------------------------------------------------------------------------- */
+
+void FixNVEBodyAgent::copy_arrays(int i, int j, int /*delflag*/)
+{
+  growth_rates_all[j] = growth_rates_all[i];
+}
+
+/* ----------------------------------------------------------------------
+   initialize one atom's array values, called when atom is created
+------------------------------------------------------------------------- */
+
+void FixNVEBodyAgent::set_arrays(int i)
+{
+  growth_rates_all[i] = 0;
+}
+
+/* ----------------------------------------------------------------------
+   pack values in local atom-based array for exchange with another proc
+------------------------------------------------------------------------- */
+
+int FixNVEBodyAgent::pack_exchange(int i, double *buf)
+{
+  int n = 0;
+  buf[n++] = growth_rates_all[i];
+  return n;
+}
+
+/* ----------------------------------------------------------------------
+   unpack values in local atom-based array from exchange with another proc
+------------------------------------------------------------------------- */
+
+int FixNVEBodyAgent::unpack_exchange(int nlocal, double *buf)
+{
+  int n = 0;
+  growth_rates_all[nlocal] = buf[n++];
+  return n;
+}
+
 /* ----------------------------------------------------------------------
   read LAMMPS fix parameters from input script
 ------------------------------------------------------------------------- */
+
 void FixNVEBodyAgent::read_params(int narg, char **arg)
 {
   // default values
