@@ -194,9 +194,10 @@ void FixNVEBodyAgent::pre_exchange()
   atom->avec->clear_bonus();
 
   // loop over all cells and determine which one is dividing
+  bool any_division = false;
   for (int i = 0; i < nlocal; i++) {
     if (mask[i] & groupbit) {
-      proliferate_single_body(i);
+      proliferate_single_body(i, any_division);
     }
   }
 
@@ -206,7 +207,9 @@ void FixNVEBodyAgent::pre_exchange()
   }
 
   // force reneighboring by given interval
-  next_reneighbor = update->ntimestep + FORCE_RENEIGHBOR_INTERVAL;
+  if (any_division) {
+    next_reneighbor = update->ntimestep + FORCE_RENEIGHBOR_INTERVAL;
+  }
 
   // reallocate the per-atom vector if nmax is changed
   if (nmax < atom->nmax) {
@@ -255,7 +258,7 @@ void FixNVEBodyAgent::final_integrate()
   if dividing, insert a new daughter body
 ---------------------------------------------------------------------- */
 
-void FixNVEBodyAgent::proliferate_single_body(int ibody)
+void FixNVEBodyAgent::proliferate_single_body(int ibody, bool &is_dividing)
 {
   AtomVecBody::Bonus *bonus = avec->bonus;
   double *rmass = atom->rmass;
@@ -266,10 +269,14 @@ void FixNVEBodyAgent::proliferate_single_body(int ibody)
   double *p = bonus[body[ibody]].dvalue;
   double L = length(p);                             // length of the rod
   double r = radius(p, 2);                          // rounded radius of the rod
+
   if (L >= L_max) {
+    is_dividing = true;
     // calculate new center locations of two daughter bodies
     // c1 is the relative displacements of the first daughter body, c2 is the second
+    #ifdef FIX_NVE_BODY_AGENT_DEBUG
     printf("proliferating the cell %d, current timestep: %d\n", ibody, update->ntimestep);
+    #endif
     double temp[6];
     for (int j = 0; j < 6; j++)
       temp[j] = bonus[body[ibody]].dvalue[j] * (L / 2 + r) / L;
@@ -291,14 +298,23 @@ void FixNVEBodyAgent::proliferate_single_body(int ibody)
     bonus[body[ibody]].dvalue[6+2] *= prolif_ratio;
 
     // insert the second daughter body
-    avec->add_body(ibody);
-    int new_body_index = atom->nlocal - 1;          // append the new cell to the last
-    copy_atom(ibody, new_body_index);               // copy the atom information, such as velocity and angular momentum
-    atom->tag[new_body_index] = atom->natoms + 1;
+    // avec->add_body(ibody);
     for (int j = 0; j < 3; j++)
     {
-      x[new_body_index][j] = x_old[j] + c2[j];      // set up the center location of the second daughter body
+      // x[new_body_index][j] = x_old[j] + c2[j];      // set up the center location of the second daughter body
+      c2[j] = c2[j] + x_old[j];
     }
+    avec->create_atom(atom->type[ibody], c2);
+    int new_body_index = atom->nlocal - 1;          // append the new cell to the last
+    copy_atom(ibody, new_body_index);               // copy the atom information, such as velocity and angular momentum
+    body[new_body_index] = 0;
+    int int_temp[3] = {2, 0, 0};
+    double double_temp[13] = {5.000000e-04, 1.270833e-03, 1.270833e-03, 0.000000e+00, 0.000000e+00, 0.000000e+00,
+                              -1.250000, 0.000000, 0.000000, 1.250000, 0.000000, 0.000000, 2.000000};
+    avec->data_body(new_body_index, 3, 13, int_temp, double_temp);
+    avec->deep_copy_bonus(body[ibody], body[new_body_index]);
+
+    atom->tag[new_body_index] = atom->natoms + 1;
     growth_rates_all[new_body_index] = random->gaussian() * growth_standard_dev + growth_rate;  // set up the growth rate for the new cell
 
     // ensure they are in equilibrium
@@ -477,17 +493,18 @@ void FixNVEBodyAgent::set_force(int ibody, double fx, double fy, double fz, doub
 
 /* ----------------------------------------------------------------------
   copy the atom information from ibody to jbody
+  location information is not copied
   tag is not copied and initialized as 0
   tag needs to be specially taken care of, especially under parallel settings
 ---------------------------------------------------------------------- */
 
 void FixNVEBodyAgent::copy_atom(int ibody, int jbody)
 {
-  atom->tag[jbody] = 0;
+  // atom->tag[jbody] = 0;
   atom->type[jbody] = atom->type[ibody];
-  atom->x[jbody][0] = atom->x[ibody][0];
-  atom->x[jbody][1] = atom->x[ibody][1];
-  atom->x[jbody][2] = atom->x[ibody][2];
+  // atom->x[jbody][0] = atom->x[ibody][0];
+  // atom->x[jbody][1] = atom->x[ibody][1];
+  // atom->x[jbody][2] = atom->x[ibody][2];
   atom->mask[jbody] = atom->mask[ibody];
   atom->image[jbody] = atom->image[ibody];
   atom->v[jbody][0] = atom->v[ibody][0];
@@ -504,6 +521,7 @@ void FixNVEBodyAgent::copy_atom(int ibody, int jbody)
   printf("copy_atom() from local index %d to %d\n", ibody, jbody);
   printf("location: %f %f %f\n", atom->x[jbody][0], atom->x[jbody][1], atom->x[jbody][2]);
   printf("image flag: %d\n", atom->image[jbody]);
+  printf("atom tag: %d\n", atom->tag[jbody]);
   printf("velocity: %f %f %f\n", atom->v[jbody][0], atom->v[jbody][1], atom->v[jbody][2]);
   printf("angular momentum: %f %f %f\n", atom->angmom[jbody][0], atom->angmom[jbody][1], atom->angmom[jbody][2]);
   #endif

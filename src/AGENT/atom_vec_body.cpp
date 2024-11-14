@@ -574,7 +574,7 @@ void AtomVecBody::add_body(int i)
   // copy the atom i to the end of the atom vector
   deep_copy_body(i, atom->nlocal);
 
-  atom->tag[atom->nlocal] = 0; // need manually reset the atom tag in other places, and this is important for atom maps
+  atom->tag[atom->nlocal] = atom->nlocal + 1; // need manually reset the atom tag in other places, and this is important for atom maps
   atom->nlocal++;
   nlocal_bonus++;
 }

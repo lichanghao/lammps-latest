@@ -54,7 +54,7 @@ class FixNVEBodyAgent : public FixNVE {
   class RanPark *random;         // random generator
 
   void grow_single_body(int, double);                                         // grow a single cell in a given timestep
-  void proliferate_single_body(int);                                          // check length and proliferate a cell             
+  void proliferate_single_body(int, bool&);                                    // check length and proliferate a cell             
   void body2space(double*, double*, double*);                                 // convert a vector in body frame to space frame
   void translate_single_body(int, double*);                                   // give a displacement to a cell
   void apply_damping_force(int, double*, double**, double**);                 // environmental viscous force
