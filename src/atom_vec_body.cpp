@@ -33,6 +33,9 @@ AtomVecBody::AtomVecBody(LAMMPS *lmp) : AtomVec(lmp)
   molecular = Atom::ATOMIC;
   bonus_flag = 1;
 
+  // modified by Changhao: allow bonds data structure
+  // bonds_allow = 1;
+
   // first 3 sizes do not include values from body itself
   // 1st,2nd body counts are added in process_args() via body style
   // 3rd body count is added in size_restart_bonus()
@@ -614,7 +617,6 @@ void AtomVecBody::deep_copy_bonus(int ibonus, int jbonus)
 
   bonus[jbonus].ninteger = bonus[ibonus].ninteger;
   bonus[jbonus].ndouble = bonus[ibonus].ndouble;
-  bonus[jbonus].ilocal = bonus[ibonus].ilocal;
   for (int i = 0; i < 4; i++)
   {
     if (bonus[jbonus].quat) bonus[jbonus].quat[i] = bonus[ibonus].quat[i];

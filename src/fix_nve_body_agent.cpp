@@ -27,6 +27,7 @@
 #include "error.h"
 #include "update.h"
 #include "memory.h"
+#include "comm.h"
 #include "random_park.h"
 
 using namespace LAMMPS_NS;
@@ -36,8 +37,8 @@ using namespace FixConst;
 #define INITIAL_INERTIA_x 5e-4
 #define INITIAL_INERTIA_y 1.2708e-4
 #define INITIAL_INERTIA_z 1.2708e-4
-#define RANDOM_SEED 1
-#define FORCE_RENEIGHBOR_INTERVAL 10
+#define RANDOM_SEED 2189634
+#define FORCE_RENEIGHBOR_INTERVAL 1
 
 // #define FIX_NVE_BODY_AGENT_DEBUG
 // #define DEBUG_INTERVAL 2000
@@ -72,6 +73,9 @@ FixNVEBodyAgent::FixNVEBodyAgent(LAMMPS *lmp, int narg, char **arg) :
 
   // initiate the image flag for all atoms as 0, because somehow the original body package did not do it
   for (int i = 0; i < nlocal; i++) atom->image[i] = 0;
+
+  // find maximum id across all processors
+  find_maxid();
 }
 
 /* ---------------------------------------------------------------------- */
@@ -80,6 +84,9 @@ void FixNVEBodyAgent::init()
 {
   avec = dynamic_cast<AtomVecBody *>(atom->style_match("body"));
   if (!avec) error->all(FLERR,"Fix nve/body/agent requires atom style body");
+
+  avec_hybrid = dynamic_cast<AtomVec *>(atom->style_match("hybrid"));
+  if (!avec) avec_hybrid = avec;
 
   force_reneighbor = 1;
   next_reneighbor = update->ntimestep + 1;
@@ -154,8 +161,8 @@ void FixNVEBodyAgent::initial_integrate(int /*vflag*/)
       MathExtra::mq_to_omega(angmom[i], quat, inertia, omega);
       apply_damping_force(i, omega, f, torque);
       
-      // apply infinitesimal noise (1e-8)
-      add_noise(f[i], torque[i], 1e-8);
+      // apply infinitesimal noise to break symmetry
+      add_noise(f[i], torque[i], noise_level);
 
       // update velocity by full step, displacement by 1/2 step
       v[i][0] += dtfm * f[i][0];
@@ -194,21 +201,19 @@ void FixNVEBodyAgent::pre_exchange()
   atom->avec->clear_bonus();
 
   // loop over all cells and determine which one is dividing
+  find_maxid();
   bool any_division = false;
+  int nadded = 0;
   for (int i = 0; i < nlocal; i++) {
     if (mask[i] & groupbit) {
       proliferate_single_body(i, any_division);
+      if (any_division) {nadded++; atom->tag[atom->nlocal - 1] = maxtag_all + nadded;}
     }
   }
 
   if (atom->map_style != Atom::MAP_NONE) {
     atom->map_init(1);
     atom->map_set();
-  }
-
-  // force reneighboring by given interval
-  if (any_division) {
-    next_reneighbor = update->ntimestep + FORCE_RENEIGHBOR_INTERVAL;
   }
 
   // reallocate the per-atom vector if nmax is changed
@@ -249,6 +254,11 @@ void FixNVEBodyAgent::final_integrate()
       angmom[i][2] += dtf * torque[i][2];
 
       grow_single_body(i, growth_rates_all[i]);
+
+      // force reneighboring by given interval
+      if (length(avec->bonus[atom->body[i]].dvalue) > L_max) {
+        next_reneighbor = update->ntimestep + FORCE_RENEIGHBOR_INTERVAL;
+      }
     }
 }
 
@@ -292,10 +302,10 @@ void FixNVEBodyAgent::proliferate_single_body(int ibody, bool &is_dividing)
 
     // mother body -> the first daughter body
     double prolif_ratio = (L / 2 - r) / L;
-    translate_single_body(ibody, c1);
     for (int j = 0; j < 6; j++)
       bonus[body[ibody]].dvalue[j] *= prolif_ratio;
     bonus[body[ibody]].dvalue[6+2] *= prolif_ratio;
+    translate_single_body(ibody, c1);                  // translate the mother body
 
     // insert the second daughter body
     // avec->add_body(ibody);
@@ -304,9 +314,9 @@ void FixNVEBodyAgent::proliferate_single_body(int ibody, bool &is_dividing)
       // x[new_body_index][j] = x_old[j] + c2[j];      // set up the center location of the second daughter body
       c2[j] = c2[j] + x_old[j];
     }
-    avec->create_atom(atom->type[ibody], c2);
-    int new_body_index = atom->nlocal - 1;          // append the new cell to the last
-    copy_atom(ibody, new_body_index);               // copy the atom information, such as velocity and angular momentum
+    atom->avec->create_atom(atom->type[ibody], c2);
+    int new_body_index = atom->nlocal - 1;             // append the new cell to the last
+    copy_atom(ibody, new_body_index);                  // copy the atom information, such as velocity and angular momentum
     body[new_body_index] = 0;
     int int_temp[3] = {2, 0, 0};
     double double_temp[13] = {5.000000e-04, 1.270833e-03, 1.270833e-03, 0.000000e+00, 0.000000e+00, 0.000000e+00,
@@ -314,7 +324,6 @@ void FixNVEBodyAgent::proliferate_single_body(int ibody, bool &is_dividing)
     avec->data_body(new_body_index, 3, 13, int_temp, double_temp);
     avec->deep_copy_bonus(body[ibody], body[new_body_index]);
 
-    atom->tag[new_body_index] = atom->natoms + 1;
     growth_rates_all[new_body_index] = random->gaussian() * growth_standard_dev + growth_rate;  // set up the growth rate for the new cell
 
     // ensure they are in equilibrium
@@ -519,7 +528,8 @@ void FixNVEBodyAgent::copy_atom(int ibody, int jbody)
   // debug code
   #ifdef FIX_NVE_BODY_AGENT_DEBUG
   printf("copy_atom() from local index %d to %d\n", ibody, jbody);
-  printf("location: %f %f %f\n", atom->x[jbody][0], atom->x[jbody][1], atom->x[jbody][2]);
+  printf("location of %d: %f %f %f\n", ibody, atom->x[ibody][0], atom->x[ibody][1], atom->x[ibody][2]);
+  printf("location of %d: %f %f %f\n", jbody, atom->x[jbody][0], atom->x[jbody][1], atom->x[jbody][2]);
   printf("image flag: %d\n", atom->image[jbody]);
   printf("atom tag: %d\n", atom->tag[jbody]);
   printf("velocity: %f %f %f\n", atom->v[jbody][0], atom->v[jbody][1], atom->v[jbody][2]);
@@ -653,18 +663,20 @@ void FixNVEBodyAgent::read_params(int narg, char **arg)
     }
   }
 
-  printf("\n------------------ Fix_NVE_Body_Agent Parameters ------------------\n");
-  printf("growth_rate = %f\n", growth_rate);
-  printf("growth_standard_dev = %f\n", growth_standard_dev);
-  printf("L_max = %f\n", L_max);
-  printf("nu_0 = %f\n", nu_0);
-  printf("noise_level (normalized by 1e-8) = %f\n", noise_level/1e-8);
-  printf("kLH = %f\n", kLH);
-  printf("kHL = %f\n", kHL);
-  printf("coeff_nu_0_xy = %f\n", coeff_nu_0_xy);
-  printf("coeff_nu_0_z = %f\n", coeff_nu_0_z);
-  printf("z_damp_height = %f\n", z_damp_height);
-  printf("-------------------------------------------------------------------\n\n");
+  if (lmp->comm->me == 0) {
+    printf("\n------------------ Fix_NVE_Body_Agent Parameters ------------------\n");
+    printf("growth_rate = %f\n", growth_rate);
+    printf("growth_standard_dev = %f\n", growth_standard_dev);
+    printf("L_max = %f\n", L_max);
+    printf("nu_0 = %f\n", nu_0);
+    printf("noise_level (normalized by 1e-8) = %f\n", noise_level/1e-8);
+    printf("kLH = %f\n", kLH);
+    printf("kHL = %f\n", kHL);
+    printf("coeff_nu_0_xy = %f\n", coeff_nu_0_xy);
+    printf("coeff_nu_0_z = %f\n", coeff_nu_0_z);
+    printf("z_damp_height = %f\n", z_damp_height);
+    printf("-------------------------------------------------------------------\n\n");
+  }
 }
 
 
@@ -672,7 +684,22 @@ void FixNVEBodyAgent::read_params(int narg, char **arg)
   maxtag_all = current max atom ID for all atoms
 ------------------------------------------------------------------------- */
 
-// void FixNVEBodyAgent::find_maxid()
+void FixNVEBodyAgent::find_maxid()
+{
+  tagint *tag = atom->tag;
+  tagint *molecule = atom->molecule;
+  int nlocal = atom->nlocal;
+
+  tagint max = 0;
+  for (int i = 0; i < nlocal; i++) max = MAX(max,tag[i]);
+  MPI_Allreduce(&max,&maxtag_all,1,MPI_LMP_TAGINT,MPI_MAX,world);
+}
+
+/* ----------------------------------------------------------------------
+  find how many added atoms in this timestep, across all processors
+------------------------------------------------------------------------- */
+
+// void FixNVEBodyAgent::find_nadded_atoms()
 // {
 //   tagint *tag = atom->tag;
 //   tagint *molecule = atom->molecule;
