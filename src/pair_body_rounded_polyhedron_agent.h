@@ -153,6 +153,8 @@ class PairBodyRoundedPolyhedronAgent : public Pair {
                         double *q_proj, double &d, int &inside);
   void project_pt_line(const double *q, const double *xi1, const double *xi2, double *h, double &d,
                        double &t);
+  void project_pt_line_new(const double *q, const double *xi1, const double *xi2, double *h, double &d,
+                       double &t);
   void inside_polygon(int ibody, int face_index, double *xmi, const double *q1, const double *q2,
                       int &inside1, int &inside2);
 

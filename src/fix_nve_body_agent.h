@@ -51,8 +51,8 @@ class FixNVEBodyAgent : public FixNVE {
 
   double *growth_rates_all;      // peratom vector for growth rates
 
-  class AtomVecBody *avec;
-  class AtomVec *avec_hybrid;
+  class AtomVecBody *avec;       // pointer to AtomVecBody class
+  class AtomVec *avec_hybrid;    // pointer to AtomVecHybrid class if hybrid style is used, otherwise same as avec
   class RanPark *random;         // random generator
 
   void grow_single_body(int, double);                                         // grow a single cell in a given timestep
@@ -65,6 +65,7 @@ class FixNVEBodyAgent : public FixNVE {
   void set_force(int, double, double, double, double, double, double);        // manually set the force and the torque for a given cell
   void add_noise(double*, double*, double);                                   // add random noise to force and moment vectors
   void copy_atom(int, int);                                                   // copy atom information from local index i to j
+  void determine_next_reneighbor();                                           // determine the next reneighbor timestep
 
   double memory_usage() override;                                             // return memory usage of this fix
   void grow_arrays(int) override;                                             // grow arrays for peratom vector

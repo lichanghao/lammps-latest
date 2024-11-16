@@ -42,6 +42,7 @@
 #include "modify.h"
 #include "neigh_list.h"
 #include "neighbor.h"
+#include "update.h"
 
 #include <cmath>
 #include <cstring>
@@ -731,13 +732,17 @@ void PairBodyRoundedPolyhedronAgent::sphere_against_edge(int ibody, int jbody,
     xi2[2] = x[ibody][2] + discrete[ifirst+npi2][2];
 
     // find the projection of the jbody's COM on the edge
+    // modified by Changhao: fixed the bug if the COM of the sphere is on the extension line of the edge
+    // Note: it worked for a cylinder interacting with a sphere, but probably not correct for a polyhedron
+    project_pt_line_new(x[jbody], xi1, xi2, h, d, t);
 
-    project_pt_line(x[jbody], xi1, xi2, h, d, t);
+    if (update->ntimestep % 1000 == 0)
+      printf("R = %f, contact_dist = %f, cut_inner = %f, d = %f\n", R, contact_dist, cut_inner, d);
 
     if (d > contact_dist + cut_inner) continue;
-    if (t < 0 || t > 1) continue;
+    if ((t < 0 || t > 1) && d > contact_dist) continue;               // modified by Changhao
 
-    if (fabs(t) < EPSILON) {
+    if (fabs(t) < EPSILON) {                      // modified by Changhao
       if (static_cast<int>(discrete[ifirst+npi1][6]) == 1)
         continue;
       else {
@@ -748,7 +753,7 @@ void PairBodyRoundedPolyhedronAgent::sphere_against_edge(int ibody, int jbody,
       }
     }
 
-    if (fabs(t-1) < EPSILON) {
+    if (fabs(t-1) < EPSILON) {                    // modified by Changhao
       if (static_cast<int>(discrete[ifirst+npi2][6]) == 1)
         continue;
       else {
@@ -768,6 +773,7 @@ void PairBodyRoundedPolyhedronAgent::sphere_against_edge(int ibody, int jbody,
     R = rij - contact_dist;
 
     energy = 0;
+      
     kernel_force(R, itype, jtype, energy, fpair);
 
     fx = delx*fpair/rij;
@@ -2034,7 +2040,51 @@ void PairBodyRoundedPolyhedronAgent::project_pt_plane(const double* q,
   d = MathExtra::len3(ans);
 }
 
-/* ---------------------------------------------------------------------- */
+/* ----------------------------------------------------------------------
+  compute the shortest distance between a point and a line segment
+  q: the point
+  xi1, xi2: two endpoints of the line segment
+  h: the end point of the shortest segment perpendicular to the line
+     on the line (xi1;xi2)
+  d: the distance between q and h
+  t: the fraction of h in the segment (xi1,xi2)
+   ---------------------------------------------------------------------- */
+
+void PairBodyRoundedPolyhedronAgent::project_pt_line_new(const double* q,
+     const double* xi1, const double* xi2, double* h, double& d, double& t)
+{
+  double u[3],v[3],r[3],s;
+
+  MathExtra::sub3(xi2, xi1, u);
+  MathExtra::norm3(u);
+  MathExtra::sub3(q, xi1, v);
+
+  s = MathExtra::dot3(u, v);
+  h[0] = xi1[0] + s * u[0];
+  h[1] = xi1[1] + s * u[1];
+  h[2] = xi1[2] + s * u[2];
+
+  MathExtra::sub3(q, h, r);
+  d = MathExtra::len3(r);
+
+  if (fabs(xi2[0] - xi1[0]) > 0)
+    t = (h[0] - xi1[0])/(xi2[0] - xi1[0]);
+  else if (fabs(xi2[1] - xi1[1]) > 0)
+    t = (h[1] - xi1[1])/(xi2[1] - xi1[1]);
+  else if (fabs(xi2[2] - xi1[2]) > 0)
+    t = (h[2] - xi1[2])/(xi2[2] - xi1[2]);
+
+  if (t < 0 || t > 1) {
+    MathExtra::sub3(q, xi2, u);
+    double d1 = MathExtra::lensq3(u);
+    MathExtra::sub3(q, xi1, u);
+    double d2 = MathExtra::lensq3(u);
+    d = std::min(d1, d2);
+    d = std::sqrt(d);
+  }
+  if (t < 0) MathExtra::copy3(xi1, h);
+  if (t > 1) MathExtra::copy3(xi2, h);
+}
 
 void PairBodyRoundedPolyhedronAgent::project_pt_line(const double* q,
      const double* xi1, const double* xi2, double* h, double& d, double& t)

@@ -65,6 +65,7 @@ class FixNVEBodyAgent : public FixNVE {
   void set_force(int, double, double, double, double, double, double);        // manually set the force and the torque for a given cell
   void add_noise(double*, double*, double);                                   // add random noise to force and moment vectors
   void copy_atom(int, int);                                                   // copy atom information from local index i to j
+  void determine_next_reneighbor();                                           // determine the next reneighbor timestep
 
   double memory_usage() override;                                             // return memory usage of this fix
   void grow_arrays(int) override;                                             // grow arrays for peratom vector

@@ -254,11 +254,6 @@ void FixNVEBodyAgent::final_integrate()
       angmom[i][2] += dtf * torque[i][2];
 
       grow_single_body(i, growth_rates_all[i]);
-
-      // force reneighboring by given interval
-      if (length(avec->bonus[atom->body[i]].dvalue) > L_max) {
-        next_reneighbor = update->ntimestep + FORCE_RENEIGHBOR_INTERVAL;
-      }
     }
 }
 
@@ -679,6 +674,24 @@ void FixNVEBodyAgent::read_params(int narg, char **arg)
   }
 }
 
+/* ----------------------------------------------------------------------
+  loop over all atoms to determine if there is a need to reneighboring
+------------------------------------------------------------------------- */
+void FixNVEBodyAgent::determine_next_reneighbor()
+{
+  int *mask = atom->mask;
+  int nlocal = atom->nlocal;
+  if (igroup == atom->firstgroup) nlocal = atom->nfirst;
+
+  for (int i = 0; i < nlocal; i++) {
+    if (mask[i] & groupbit) {
+      if (length(avec->bonus[atom->body[i]].dvalue) > L_max) {
+        next_reneighbor = update->ntimestep + FORCE_RENEIGHBOR_INTERVAL;
+        break;
+      }
+    }
+  }
+}
 
 /* ----------------------------------------------------------------------
   maxtag_all = current max atom ID for all atoms
