@@ -57,8 +57,8 @@ FixNVEBodyAgent::FixNVEBodyAgent(LAMMPS *lmp, int narg, char **arg) :
   // read parameters from input files
   read_params(narg, arg);
 
-  // random generator
-  random = new RanPark(lmp, RANDOM_SEED);
+  // random generator (seed = RANDOM_SEED + processor_id)
+  random = new RanPark(lmp, RANDOM_SEED + lmp->comm->me);
 
   // initiate peratom vector for growth rates, Gaussian distribution ~ N(growth_rate, growth_standard_dev)
   nmax = atom->nmax;
@@ -66,7 +66,7 @@ FixNVEBodyAgent::FixNVEBodyAgent(LAMMPS *lmp, int narg, char **arg) :
   int *mask = atom->mask;
   int nlocal = atom->nlocal;
   for (int i = 0; i < nlocal; i++) {
-    if (mask[i] & groupbit)
+    // if (mask[i] & groupbit)
       growth_rates_all[i] = random->gaussian() * growth_standard_dev + growth_rate;
   }
   atom->add_callback(Atom::GROW);
@@ -183,6 +183,8 @@ void FixNVEBodyAgent::initial_integrate(int /*vflag*/)
       MathExtra::mq_to_omega(angmom[i], quat, inertia, omega);
       MathExtra::richardson(quat, angmom[i], omega, inertia, dtq);
     }
+
+    determine_next_reneighbor();
 }
 
 
@@ -194,6 +196,9 @@ void FixNVEBodyAgent::pre_exchange()
 { 
   int *mask = atom->mask;
   int nlocal = atom->nlocal;
+  
+  // just return if should not be called on this timestep
+  if (next_reneighbor != update->ntimestep) return;
 
   // clear atom maps and ghost atom information
   if (atom->map_style != Atom::MAP_NONE) atom->map_clear();
@@ -201,13 +206,20 @@ void FixNVEBodyAgent::pre_exchange()
   atom->avec->clear_bonus();
 
   // loop over all cells and determine which one is dividing
-  find_maxid();
-  bool any_division = false;
   int nadded = 0;
   for (int i = 0; i < nlocal; i++) {
+    bool any_division = false;
     if (mask[i] & groupbit) {
       proliferate_single_body(i, any_division);
-      if (any_division) {nadded++; atom->tag[atom->nlocal - 1] = maxtag_all + nadded;}
+      if (any_division) {
+        nadded++; 
+        // note: currently tag is randomly initialized from INT_MAX to the initial maxtag_all
+        // tag > 1e6 will cause segmentation fault if you use array style atom map
+        // should use hash style atom map instead to avoid this problem
+        tagint newtag = maxtag_all + static_cast<tagint>(random->uniform() * (MAXTAGINT - maxtag_all));
+        printf("added a new cell with tag %d\n", newtag);
+        atom->tag[atom->nlocal - nadded] = newtag;
+      }
     }
   }
 
@@ -369,7 +381,7 @@ void FixNVEBodyAgent::grow_single_body(int ibody, double growth_rate)
   // mass and rotational inertia are currently neglected, because the model is running under overdamped settings
   rmass[ibody] *= growth_ratio;                   // mass ~ V
   for (int j = 0; j < 3; j++) {
-    bonus[body[ibody]].inertia[j] *= pow(growth_ratio, 3); // rotational inertia ~ m*L^2
+    bonus[body[ibody]].inertia[j] *= std::pow(growth_ratio, 3); // rotational inertia ~ m*L^2
   }
 }
 
@@ -686,7 +698,7 @@ void FixNVEBodyAgent::determine_next_reneighbor()
   for (int i = 0; i < nlocal; i++) {
     if (mask[i] & groupbit) {
       if (length(avec->bonus[atom->body[i]].dvalue) > L_max) {
-        next_reneighbor = update->ntimestep + FORCE_RENEIGHBOR_INTERVAL;
+        next_reneighbor = update->ntimestep;
         break;
       }
     }
@@ -700,7 +712,6 @@ void FixNVEBodyAgent::determine_next_reneighbor()
 void FixNVEBodyAgent::find_maxid()
 {
   tagint *tag = atom->tag;
-  tagint *molecule = atom->molecule;
   int nlocal = atom->nlocal;
 
   tagint max = 0;

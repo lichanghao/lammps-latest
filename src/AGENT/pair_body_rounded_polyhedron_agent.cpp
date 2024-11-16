@@ -736,8 +736,8 @@ void PairBodyRoundedPolyhedronAgent::sphere_against_edge(int ibody, int jbody,
     // Note: it worked for a cylinder interacting with a sphere, but probably not correct for a polyhedron
     project_pt_line_new(x[jbody], xi1, xi2, h, d, t);
 
-    if (update->ntimestep % 1000 == 0)
-      printf("R = %f, contact_dist = %f, cut_inner = %f, d = %f\n", R, contact_dist, cut_inner, d);
+    // if (update->ntimestep % 1000 == 0)
+      // printf("R = %f, contact_dist = %f, cut_inner = %f, d = %f\n", R, contact_dist, cut_inner, d);
 
     if (d > contact_dist + cut_inner) continue;
     if ((t < 0 || t > 1) && d > contact_dist) continue;               // modified by Changhao
