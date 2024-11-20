@@ -217,7 +217,6 @@ void FixNVEBodyAgent::pre_exchange()
         // tag > 1e6 will cause segmentation fault if you use array style atom map
         // should use hash style atom map instead to avoid this problem
         tagint newtag = maxtag_all + static_cast<tagint>(random->uniform() * (MAXTAGINT - maxtag_all));
-        printf("added a new cell with tag %d\n", newtag);
         atom->tag[atom->nlocal - nadded] = newtag;
       }
     }
@@ -226,13 +225,6 @@ void FixNVEBodyAgent::pre_exchange()
   if (atom->map_style != Atom::MAP_NONE) {
     atom->map_init(1);
     atom->map_set();
-  }
-
-  // reallocate the per-atom vector if nmax is changed
-  if (nmax < atom->nmax) {
-    memory->destroy(growth_rates_all);
-    nmax = atom->nmax;
-    grow_arrays(nmax);
   }
 }
 
@@ -292,7 +284,7 @@ void FixNVEBodyAgent::proliferate_single_body(int ibody, bool &is_dividing)
     // calculate new center locations of two daughter bodies
     // c1 is the relative displacements of the first daughter body, c2 is the second
     #ifdef FIX_NVE_BODY_AGENT_DEBUG
-    printf("proliferating the cell %d, current timestep: %d\n", ibody, update->ntimestep);
+    printf("proliferating the cell %d with rounded radius %f, current timestep: %d\n", ibody ,bonus[body[ibody]].dvalue[6+2], update->ntimestep);
     #endif
     double temp[6];
     for (int j = 0; j < 6; j++)
@@ -326,14 +318,12 @@ void FixNVEBodyAgent::proliferate_single_body(int ibody, bool &is_dividing)
     copy_atom(ibody, new_body_index);                  // copy the atom information, such as velocity and angular momentum
     body[new_body_index] = 0;
     int int_temp[3] = {2, 0, 0};
-    double double_temp[13] = {5.000000e-04, 1.270833e-03, 1.270833e-03, 0.000000e+00, 0.000000e+00, 0.000000e+00,
+    double double_temp[13] = {INITIAL_INERTIA_x, INITIAL_INERTIA_y, INITIAL_INERTIA_z, 0.000000e+00, 0.000000e+00, 0.000000e+00,
                               -1.250000, 0.000000, 0.000000, 1.250000, 0.000000, 0.000000, 2.000000};
     avec->data_body(new_body_index, 3, 13, int_temp, double_temp);
     avec->deep_copy_bonus(body[ibody], body[new_body_index]);
 
-    growth_rates_all[new_body_index] = random->gaussian() * growth_standard_dev + growth_rate;  // set up the growth rate for the new cell
-
-    // ensure they are in equilibrium
+    // forcing no net external forces
     set_force(ibody, 0, 0, 0, 0, 0, 0);
     set_force(new_body_index, 0, 0, 0, 0, 0, 0);
 
@@ -346,6 +336,13 @@ void FixNVEBodyAgent::proliferate_single_body(int ibody, bool &is_dividing)
     bonus[body[new_body_index]].inertia[0] = INITIAL_INERTIA_x;
     bonus[body[new_body_index]].inertia[1] = INITIAL_INERTIA_y;
     bonus[body[new_body_index]].inertia[2] = INITIAL_INERTIA_z;
+
+    // reallocate the per-atom vector if nmax is changed
+    if (nmax < atom->nmax) {
+      nmax = atom->nmax;
+      grow_arrays(nmax);
+    }
+    growth_rates_all[new_body_index] = random->gaussian() * growth_standard_dev + growth_rate;
   }
 }
 
@@ -551,7 +548,7 @@ void FixNVEBodyAgent::copy_atom(int ibody, int jbody)
 
 void FixNVEBodyAgent::grow_arrays(int n)
 {
-  memory->create(growth_rates_all, n, "fix/nve/body/agent:growth_rates_all");
+  memory->grow(growth_rates_all, n, "fix/nve/body/agent:growth_rates_all");
   vector_atom = growth_rates_all;
 }
 
