@@ -15,8 +15,7 @@
 /* ----------------------------------------------------------------------
    Agent-based simulation for bacteria biofilms
    Author: Changhao Li (changhaoli1997@gmail.com)
-   Status: under development. Need to fix the bond hash map problem
-   Last updated: 11/12/2024
+   Last updated: 11/17/2024
 ------------------------------------------------------------------------- */
 
 #include <cmath>
@@ -58,7 +57,7 @@ FixNVEBodyAgent::FixNVEBodyAgent(LAMMPS *lmp, int narg, char **arg) :
   read_params(narg, arg);
 
   // random generator (seed = RANDOM_SEED + processor_id)
-  random = new RanPark(lmp, RANDOM_SEED + lmp->comm->me);
+  random = new RanPark(lmp, RANDOM_SEED + comm->me);
 
   // initiate peratom vector for growth rates, Gaussian distribution ~ N(growth_rate, growth_standard_dev)
   nmax = atom->nmax;
@@ -667,7 +666,7 @@ void FixNVEBodyAgent::read_params(int narg, char **arg)
     }
   }
 
-  if (lmp->comm->me == 0) {
+  if (comm->me == 0) {
     printf("\n------------------ Fix_NVE_Body_Agent Parameters ------------------\n");
     printf("growth_rate = %f\n", growth_rate);
     printf("growth_standard_dev = %f\n", growth_standard_dev);
