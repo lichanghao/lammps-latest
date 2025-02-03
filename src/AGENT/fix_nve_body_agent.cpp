@@ -15,7 +15,7 @@
 /* ----------------------------------------------------------------------
    Agent-based simulation for bacteria biofilms
    Author: Changhao Li (changhaoli1997@gmail.com)
-   Last updated: 11/17/2024
+   Last updated: 02/03/2025
 ------------------------------------------------------------------------- */
 
 #include <cmath>
@@ -47,7 +47,7 @@ using namespace FixConst;
 FixNVEBodyAgent::FixNVEBodyAgent(LAMMPS *lmp, int narg, char **arg) :
   FixNVE(lmp, narg, arg) 
 { 
-  // set fix parent class tags
+  // set fix parent class tags, indicating this fix creates a scalar array per atom
   peratom_flag = 1;
   size_peratom_cols = 0;
   peratom_freq = 1;
@@ -69,6 +69,7 @@ FixNVEBodyAgent::FixNVEBodyAgent(LAMMPS *lmp, int narg, char **arg) :
       growth_rates_all[i] = random->gaussian() * growth_standard_dev + growth_rate;
   }
   atom->add_callback(Atom::GROW);
+  atom->add_callback(Atom::BORDER);
 
   // initiate the image flag for all atoms as 0, because somehow the original body package did not do it
   for (int i = 0; i < nlocal; i++) atom->image[i] = 0;
@@ -110,6 +111,7 @@ FixNVEBodyAgent::~FixNVEBodyAgent()
 {
   delete random;
   atom->delete_callback(id, Atom::GROW);
+  atom->delete_callback(id, Atom::BORDER);
   memory->destroy(growth_rates_all);
 }
 
@@ -306,7 +308,7 @@ void FixNVEBodyAgent::proliferate_single_body(int ibody, bool &is_dividing)
     translate_single_body(ibody, c1);                  // translate the mother body
 
     // insert the second daughter body
-    // avec->add_body(ibody);
+    // avec->add_body(ibody); // this function is deprecated
     for (int j = 0; j < 3; j++)
     {
       // x[new_body_index][j] = x_old[j] + c2[j];      // set up the center location of the second daughter body
@@ -316,11 +318,11 @@ void FixNVEBodyAgent::proliferate_single_body(int ibody, bool &is_dividing)
     int new_body_index = atom->nlocal - 1;             // append the new cell to the last
     copy_atom(ibody, new_body_index);                  // copy the atom information, such as velocity and angular momentum
     body[new_body_index] = 0;
-    int int_temp[3] = {2, 0, 0};
+    int int_temp[3] = {2, 0, 0};                       // default values for the int array (number of nodes, edges, and faces) of the new body
     double double_temp[13] = {INITIAL_INERTIA_x, INITIAL_INERTIA_y, INITIAL_INERTIA_z, 0.000000e+00, 0.000000e+00, 0.000000e+00,
-                              -1.250000, 0.000000, 0.000000, 1.250000, 0.000000, 0.000000, 2.000000};
-    avec->data_body(new_body_index, 3, 13, int_temp, double_temp);
-    avec->deep_copy_bonus(body[ibody], body[new_body_index]);
+                              -1.250000, 0.000000, 0.000000, 1.250000, 0.000000, 0.000000, 2.000000}; // default values for the double array (coordinates for nodes, and other stuff) of the new body 
+    avec->data_body(new_body_index, 3, 13, int_temp, double_temp); // directly call the datareader function to avoid memory problems
+    avec->deep_copy_bonus(body[ibody], body[new_body_index]);      // setup bonus values
 
     // forcing no net external forces
     set_force(ibody, 0, 0, 0, 0, 0, 0);
@@ -471,7 +473,8 @@ void FixNVEBodyAgent::add_noise(double *f, double *mom, double given_noise_level
 
 double FixNVEBodyAgent::radius(double *data, int nvert)
 {
-  return data[nvert * 3 + 2 + 1];
+  // this is only correct for rod-like bodies with 2 nodes, 0 edges and 0 faces
+  return data[nvert * 3 + 2 + 1]; 
 }
 
 
@@ -481,6 +484,7 @@ double FixNVEBodyAgent::radius(double *data, int nvert)
 
 double FixNVEBodyAgent::length(double *data)
 {
+  // this is only correct for rod-like bodies with 2 nodes, 0 edges and 0 faces
   return sqrt(std::pow(data[3] - data[0], 2) + std::pow(data[4] - data[1], 2) + std::pow(data[5] - data[2], 2));
 }
 
@@ -599,6 +603,33 @@ int FixNVEBodyAgent::unpack_exchange(int nlocal, double *buf)
   int n = 0;
   growth_rates_all[nlocal] = buf[n++];
   return n;
+}
+
+/* ----------------------------------------------------------------------
+   pack values for border communication at re-neighboring
+------------------------------------------------------------------------- */
+
+int FixNVEBodyAgent::pack_border(int n, int *list, double *buf)
+{
+    int m = 0;
+    for (int i = 0; i < n; i++) {
+        int j = list[i];
+        buf[m++] = growth_rates_all[j]; // you can use ubuf() in lmptype.h to avoid compiler warnings for type conversion, but it is not needed here
+    }
+    return m;
+}
+
+/* ----------------------------------------------------------------------
+   unpack values for border communication at re-neighboring
+------------------------------------------------------------------------- */
+
+int FixNVEBodyAgent::unpack_border(int n, int first, double *buf)
+{
+    int m = 0;
+    for (int i = first; i < first + n; i++) {
+        growth_rates_all[i] = buf[m++];  // you can use ubuf() in lmptype.h to avoid compiler warnings for type conversion, but it is not needed here
+    }
+    return m;
 }
 
 /* ----------------------------------------------------------------------

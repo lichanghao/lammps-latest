@@ -73,7 +73,8 @@ class FixNVEBodyAgent : public FixNVE {
   void set_arrays(int) override;                                              // set per-atom information for a new atom, for parallel settings           
   int pack_exchange(int, double *) override;                                  // pack per-atom information for parallel settings
   int unpack_exchange(int, double *) override;                                // unpack per-atom information for parallel settings
-
+  int pack_border(int, int *, double *) override;                             // pack per-atom information for border settings
+  int unpack_border(int, int, double *) override;
 
   void read_params(int, char **);                                             // read parameters from input script
   void find_maxid();                                                          // find current max atom ID across all processors
