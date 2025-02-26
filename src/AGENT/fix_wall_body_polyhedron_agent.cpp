@@ -1,8 +1,7 @@
-// clang-format off
 /* ----------------------------------------------------------------------
    LAMMPS - Large-scale Atomic/Molecular Massively Parallel Simulator
-   https://www.lammps.org/, Sandia National Laboratories
-   LAMMPS development team: developers@lammps.org
+   http://lammps.sandia.gov, Sandia National Laboratories
+   Steve Plimpton, sjplimp@sandia.gov
 
    Copyright (2003) Sandia Corporation.  Under the terms of Contract
    DE-AC04-94AL85000 with Sandia Corporation, the U.S. Government retains
@@ -14,32 +13,35 @@
 
 /* ----------------------------------------------------------------------
    Contributing author: Trung Dac Nguyen (ndactrung@gmail.com)
-------------------------------------------------------------------------- */
-
-/* ----------------------------------------------------------------------
    Modified by Changhao Li (czl478@psu.edu, changhaoli1997@gmail.com) for
    modeling of bacteria film. Last modified date: 06/30/2020
 ------------------------------------------------------------------------- */
 
-#include "fix_wall_body_polyhedron_agent.h"
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
+#include "fix_wall_body_polyhedron_agent.h"
 #include "atom.h"
 #include "atom_vec_body.h"
-#include "body_rounded_polyhedron_agent.h"
+#include "body_rounded_polyhedron.h"
 #include "domain.h"
 #include "update.h"
 #include "force.h"
+#include "pair.h"
+#include "modify.h"
+#include "respa.h"
 #include "math_const.h"
 #include "math_extra.h"
 #include "memory.h"
 #include "error.h"
 
+#include "util_fibrin.h"
+
 using namespace LAMMPS_NS;
 using namespace FixConst;
 using namespace MathConst;
 
-enum{XPLANE=0,YPLANE=1,ZPLANE=2};    // XYZ PLANE need to be 0,1,2
+enum{XPLANE=0,YPLANE=1,ZPLANE};    // XYZ PLANE need to be 0,1,2
 enum{HOOKE,HOOKE_HISTORY};
 
 enum {INVALID=0,NONE=1,VERTEX=2};
@@ -47,7 +49,7 @@ enum {FAR=0,XLO,XHI,YLO,YHI,ZLO,ZHI};
 
 //#define _POLYHEDRON_DEBUG
 #define DELTA 10000
-#define EPSILON 1e-3    // dimensionless threshold (dot products, end point checks)
+#define EPSILON 1e-2
 #define BIG 1.0e20
 #define MAX_CONTACTS 4  // maximum number of contacts for 2D models
 #define EFF_CONTACTS 2  // effective contacts for 2D models
@@ -57,32 +59,31 @@ enum {FAR=0,XLO,XHI,YLO,YHI,ZLO,ZHI};
 FixWallBodyPolyhedronAgent::FixWallBodyPolyhedronAgent(LAMMPS *lmp, int narg, char **arg) :
   Fix(lmp, narg, arg)
 {
-  if (narg < 7) error->all(FLERR,"Illegal fix wall/body/polyhedron/agent command");
+  if (narg < 7) error->all(FLERR,"Illegal fix wall/body/polyhedron command");
 
   if (!atom->body_flag)
     error->all(FLERR,"Fix wall/body/polyhedron/agent requires "
-               "atom style body/rounded/polyhedron/agent");
+               "atom style body/rounded/polyhedron");
 
   restart_peratom = 1;
   create_attribute = 1;
-  wallstyle = -1;
 
   // wall/particle coefficients
 
   kn = utils::numeric(FLERR,arg[3],false,lmp);
 
   c_n = utils::numeric(FLERR,arg[4],false,lmp);
-  if (strcmp(arg[5],"NULL") == 0) c_t = 0.5 * c_n;
+  if (strcmp(arg[5],"NULL") == 0) c_t = 1e-4 * c_n;
   else c_t = utils::numeric(FLERR,arg[5],false,lmp);
 
   if (kn < 0.0 || c_n < 0.0 || c_t < 0.0)
-    error->all(FLERR,"Illegal fix wall/body/polyhedron/agent command");
+    error->all(FLERR,"Illegal fix wall/body/polyhedron command");
 
   // wallstyle args
 
   int iarg = 6;
   if (strcmp(arg[iarg],"xplane") == 0) {
-    if (narg < iarg+3) error->all(FLERR,"Illegal fix wall/body/polyhedron/agent command");
+    if (narg < iarg+3) error->all(FLERR,"Illegal fix wall/body/polyhedron command");
     wallstyle = XPLANE;
     if (strcmp(arg[iarg+1],"NULL") == 0) lo = -BIG;
     else lo = utils::numeric(FLERR,arg[iarg+1],false,lmp);
@@ -90,7 +91,7 @@ FixWallBodyPolyhedronAgent::FixWallBodyPolyhedronAgent(LAMMPS *lmp, int narg, ch
     else hi = utils::numeric(FLERR,arg[iarg+2],false,lmp);
     iarg += 3;
   } else if (strcmp(arg[iarg],"yplane") == 0) {
-    if (narg < iarg+3) error->all(FLERR,"Illegal fix wall/body/polyhedron/agent command");
+    if (narg < iarg+3) error->all(FLERR,"Illegal fix wall/body/polyhedron command");
     wallstyle = YPLANE;
     if (strcmp(arg[iarg+1],"NULL") == 0) lo = -BIG;
     else lo = utils::numeric(FLERR,arg[iarg+1],false,lmp);
@@ -98,31 +99,34 @@ FixWallBodyPolyhedronAgent::FixWallBodyPolyhedronAgent(LAMMPS *lmp, int narg, ch
     else hi = utils::numeric(FLERR,arg[iarg+2],false,lmp);
     iarg += 3;
   } else if (strcmp(arg[iarg],"zplane") == 0) {
-    if (narg < iarg+3) error->all(FLERR,"Illegal fix wall/body/polyhedron/agent command");
+    if (narg < iarg+3) error->all(FLERR,"Illegal fix wall/body/polyhedron command");
     wallstyle = ZPLANE;
     if (strcmp(arg[iarg+1],"NULL") == 0) lo = -BIG;
     else lo = utils::numeric(FLERR,arg[iarg+1],false,lmp);
     if (strcmp(arg[iarg+2],"NULL") == 0) hi = BIG;
     else hi = utils::numeric(FLERR,arg[iarg+2],false,lmp);
     iarg += 3;
-  } else error->all(FLERR,"Unknown wall style {}",arg[iarg]);
+  }
 
   // check for trailing keyword/values
 
   wiggle = 0;
-
+  activity = -1;
   while (iarg < narg) {
     if (strcmp(arg[iarg],"wiggle") == 0) {
-      if (iarg+4 > narg) error->all(FLERR,"Illegal fix wall/body/polyhedron/agent command");
+      if (iarg+4 > narg) error->all(FLERR,"Illegal fix wall/body/polyhedron command");
       if (strcmp(arg[iarg+1],"x") == 0) axis = 0;
       else if (strcmp(arg[iarg+1],"y") == 0) axis = 1;
       else if (strcmp(arg[iarg+1],"z") == 0) axis = 2;
-      else error->all(FLERR,"Illegal fix wall/body/polyhedron/agent command");
+      else error->all(FLERR,"Illegal fix wall/body/polyhedron command");
       amplitude = utils::numeric(FLERR,arg[iarg+2],false,lmp);
       period = utils::numeric(FLERR,arg[iarg+3],false,lmp);
       wiggle = 1;
       iarg += 4;
-    } else error->all(FLERR,"Illegal fix wall/body/polyhedron/agent command");
+    } else if (strcmp(arg[iarg], "activity") == 0) {
+      activity = utils::numeric(FLERR, arg[iarg + 1],false,lmp);
+      iarg += 2;
+    } else error->all(FLERR,"Illegal fix wall/body/polyhedron command");
   }
 
   if (wallstyle == XPLANE && domain->xperiodic)
@@ -139,19 +143,19 @@ FixWallBodyPolyhedronAgent::FixWallBodyPolyhedronAgent(LAMMPS *lmp, int narg, ch
   time_origin = update->ntimestep;
 
   dmax = nmax = 0;
-  discrete = nullptr;
-  dnum = dfirst = nullptr;
+  discrete = NULL;
+  dnum = dfirst = NULL;
 
   edmax = ednummax = 0;
-  edge = nullptr;
-  ednum = edfirst = nullptr;
+  edge = NULL;
+  ednum = edfirst = NULL;
 
   facmax = facnummax = 0;
-  face = nullptr;
-  facnum = facfirst = nullptr;
+  face = NULL;
+  facnum = facfirst = NULL;
 
-  enclosing_radius = nullptr;
-  rounded_radius = nullptr;
+  enclosing_radius = NULL;
+  rounded_radius = NULL;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -189,35 +193,35 @@ void FixWallBodyPolyhedronAgent::init()
 {
   dt = update->dt;
 
-  avec = dynamic_cast<AtomVecBody *>(atom->style_match("body"));
+  avec = (AtomVecBody *) atom->style_match("body");
   if (!avec)
-    error->all(FLERR,"Pair body/rounded/polyhedron/agent requires atom style body");
+    error->all(FLERR,"Pair body/rounded/polyhedron requires atom style body");
   if (strcmp(avec->bptr->style,"rounded/polyhedron/agent") != 0)
-    error->all(FLERR,"Pair body/rounded/polyhedron/agent requires "
+    error->all(FLERR,"Pair body/rounded/polyhedron requires "
                "body style rounded/polyhedron/agent");
-  bptr = dynamic_cast<BodyRoundedPolyhedronAgent *>(avec->bptr);
+  bptr = (BodyRoundedPolyhedron *) avec->bptr;
 
   // set pairstyle from body/polyhedronular pair style
 
-  if (force->pair_match("body/rounded/polyhedron/agent",1))
+  if (force->pair_match("body/rounded/polyhedron",1) || force->pair_match("body/rounded/polyhedron/agent",1))
     pairstyle = HOOKE;
-  else error->all(FLERR,"Fix wall/body/polyhedron/agent is incompatible with Pair style");
+  else error->all(FLERR,"Fix wall/body/polyhedron is incompatible with current Pair style");
 }
 
 /* ---------------------------------------------------------------------- */
 
 void FixWallBodyPolyhedronAgent::setup(int vflag)
 {
-  if (utils::strmatch(update->integrate_style,"^verlet"))
+  if (strstr(update->integrate_style,"verlet"))
     post_force(vflag);
 }
 
 /* ---------------------------------------------------------------------- */
 
-void FixWallBodyPolyhedronAgent::post_force(int /*vflag*/)
+void FixWallBodyPolyhedronAgent::post_force(int vflag)
 {
-  double vwall[3],dx,dy,dz,del1,del2,rsq,wall_pos;
-  int i,ni,npi,ifirst,nei,iefirst,side;
+  double vwall[3],dx,dy,dz,del1,del2,delxy,delr,rsq,eradi,rradi,wall_pos;
+  int i,ni,npi,ifirst,nei,iefirst,nfi,iffirst,side;
   double facc[3];
 
   // set position of wall to initial settings and velocity to 0.0
@@ -240,7 +244,7 @@ void FixWallBodyPolyhedronAgent::post_force(int /*vflag*/)
   // dx,dy,dz = signed distance from wall
   // for rotating cylinder, reset vwall based on particle position
   // skip atom if not close enough to wall
-  //   if wall was set to a null pointer, it's skipped since lo/hi are infinity
+  //   if wall was set to NULL, it's skipped since lo/hi are infinity
   // compute force and torque on atom if close enough to wall
   //   via wall potential matched to pair potential
 
@@ -328,11 +332,18 @@ void FixWallBodyPolyhedronAgent::post_force(int /*vflag*/)
       rsq = dx*dx + dy*dy + dz*dz;
       if (rsq > radius[i]*radius[i]) continue;
 
+      double r = sqrt(rsq);
+      double rsqinv = 1.0 / rsq;
+
       if (dnum[i] == 0) body2space(i);
       npi = dnum[i];
       ifirst = dfirst[i];
       nei = ednum[i];
       iefirst = edfirst[i];
+      nfi = facnum[i];
+      iffirst = facfirst[i];
+      eradi = enclosing_radius[i];
+      rradi = rounded_radius[i];
 
       if (npi == 1) {
         sphere_against_wall(i, wall_pos, side, vwall, x, v, f, angmom, torque);
@@ -355,13 +366,14 @@ void FixWallBodyPolyhedronAgent::post_force(int /*vflag*/)
         edge[iefirst+ni][5] = 0;
       }
 
-      int num_contacts;
+      int interact, num_contacts, done;
+      double delta_a, delta_ua, j_a;
       Contact contact_list[MAX_CONTACTS];
 
       num_contacts = 0;
       facc[0] = facc[1] = facc[2] = 0;
-      edge_against_wall(i, wall_pos, side, vwall, x, f, torque,
-                        contact_list, num_contacts, facc);
+      interact = edge_against_wall(i, wall_pos, side, vwall, x, f, torque,
+                                   contact_list, num_contacts, facc);
 
     } // group bit
   }
@@ -480,7 +492,7 @@ void FixWallBodyPolyhedronAgent::body2space(int i)
 ---------------------------------------------------------------------- */
 
 int FixWallBodyPolyhedronAgent::sphere_against_wall(int i, double wall_pos,
-     int /*side*/, double* vwall, double** x, double** v, double** f,
+     int side, double* vwall, double** x, double** v, double** f,
      double** angmom, double** torque)
 {
   int mode;
@@ -540,11 +552,12 @@ int FixWallBodyPolyhedronAgent::sphere_against_wall(int i, double wall_pos,
 ---------------------------------------------------------------------- */
 
 int FixWallBodyPolyhedronAgent::edge_against_wall(int i, double wall_pos,
-     int side, double* vwall, double** x, double** /*f*/, double** /*torque*/,
-     Contact* /*contact_list*/, int &/*num_contacts*/, double* /*facc*/)
+     int side, double* vwall, double** x, double** f, double** torque,
+     Contact* contact_list, int &num_contacts, double* facc)
 {
-  int ni, nei, contact;
+  int ni, nei, mode, contact;
   double rradi;
+  int nlocal = atom->nlocal;
 
   nei = ednum[i];
   rradi = rounded_radius[i];
@@ -554,7 +567,8 @@ int FixWallBodyPolyhedronAgent::edge_against_wall(int i, double wall_pos,
   // loop through body i's edges
 
   for (ni = 0; ni < nei; ni++)
-    compute_distance_to_wall(i, ni, x[i], rradi, wall_pos, side, vwall, contact);
+    mode = compute_distance_to_wall(i, ni, x[i], rradi, wall_pos, side, vwall,
+                                    contact);
 
   return contact;
 }
@@ -577,17 +591,20 @@ int FixWallBodyPolyhedronAgent::edge_against_wall(int i, double wall_pos,
 
 int FixWallBodyPolyhedronAgent::compute_distance_to_wall(int ibody, int edge_index,
                         double *xmi, double rounded_radius_i, double wall_pos,
-                        int /*side*/, double* vwall, int &contact)
+                        int side, double* vwall, int &contact)
 {
   int mode,ifirst,iefirst,npi1,npi2;
   double d1,d2,xpi1[3],xpi2[3],hi[3];
   double fx,fy,fz,fpair,delx,dely,delz,R;
 
+  AtomVecBody::Bonus *bonus = avec->bonus;
+  int *body = atom->body;
   double** x = atom->x;
   double** v = atom->v;
   double** f = atom->f;
   double** torque = atom->torque;
   double** angmom = atom->angmom;
+  int *type = atom->type; 
 
   // two ends of the edge from body i
 
@@ -604,24 +621,53 @@ int FixWallBodyPolyhedronAgent::compute_distance_to_wall(int ibody, int edge_ind
   xpi2[1] = xmi[1] + discrete[ifirst+npi2][1];
   xpi2[2] = xmi[2] + discrete[ifirst+npi2][2];
 
+  // generate a Cell type by given body information (space fixed frame)
+
+  double L = sqrt(pow(xpi1[0]-xpi2[0], 2) + pow(xpi1[1]-xpi2[1], 2) + pow(xpi1[2]-xpi2[2], 2));
+  double nx = (xpi2[0] - xpi1[0]) / L;
+  double ny = (xpi2[1] - xpi1[1]) / L;
+  double nz = (xpi2[2] - xpi1[2]) / L;
+
   // determine the intersection of the edge to the wall
 
   mode = NONE;
   double j_a = 1.0;
+  int shift_flag = 0;
+
+  if (mode == NONE) {
 
   if (wallstyle == XPLANE) {
     hi[0] = wall_pos;
     hi[1] = xpi1[1];
     hi[2] = xpi1[2];
+    shift_flag = -1;
   } else if (wallstyle == YPLANE) {
     hi[0] = xpi1[0];
     hi[1] = wall_pos;
     hi[2] = xpi1[2];
+    shift_flag = 1;
   } else if (wallstyle == ZPLANE) {
     hi[0] = xpi1[0];
     hi[1] = xpi1[1];
     hi[2] = wall_pos;
+    shift_flag = 0;
   }
+
+  // Changhao modification: only compute force by once
+  int force_flag = 0;
+
+  double center_coords[3] = {xmi[0]-hi[0], xmi[1]-hi[1], xmi[2]-hi[2]};
+  double ori_vec[3] = {nx, ny, nz};
+  shift_vector(center_coords, 3, shift_flag);
+  shift_vector(ori_vec, 3, shift_flag);
+  Cell cell = Cell(center_coords[0], center_coords[1], center_coords[2], ori_vec[0], ori_vec[1], ori_vec[2], L);
+
+  double omega[3] = {0};
+  double *inertia = bonus[body[ibody]].inertia;
+  double *quat = bonus[body[ibody]].quat;
+  MathExtra::mq_to_omega(angmom[ibody], quat, inertia, omega);
+
+  // keep_verticalized_cell(ibody, &cell, f, torque);
 
   distance(hi, xpi1, d1);
 
@@ -631,14 +677,21 @@ int FixWallBodyPolyhedronAgent::compute_distance_to_wall(int ibody, int edge_ind
     delz = xpi1[2] - hi[2];
     R = d1 - rounded_radius_i;
 
-    fpair = -kn * R;
+    fpair = -kn * sqrt(-R) * R;
 
     fx = delx*fpair/d1;
     fy = dely*fpair/d1;
     fz = delz*fpair/d1;
 
-    contact_forces(ibody, j_a, xpi1, hi, delx, dely, delz,
-                   fx, fy, fz, x, v, angmom, f, torque, vwall);
+    // contact_forces(ibody, j_a, xpi1, hi, delx, dely, delz,
+    //                fx, fy, fz, x, v, angmom, f, torque, vwall);
+    if (force_flag == 0) {
+      double nu = c_n;
+      if (type[ibody] == 1) nu = c_n;
+      else if (type[ibody] == 2) nu = c_n * activity;
+      contact_forces_new(ibody, &cell, v[ibody], omega, f, torque, kn, nu, c_t, shift_flag);
+      force_flag = 1;
+    }
     discrete[ifirst+npi1][6] = 1;
     contact++;
     mode = VERTEX;
@@ -666,17 +719,26 @@ int FixWallBodyPolyhedronAgent::compute_distance_to_wall(int ibody, int edge_ind
     delz = xpi2[2] - hi[2];
     R = d2 - rounded_radius_i;
 
-    fpair = -kn * R;
+    fpair = -kn * sqrt(-R) * R;
 
     fx = delx*fpair/d2;
     fy = dely*fpair/d2;
     fz = delz*fpair/d2;
 
-    contact_forces(ibody, j_a, xpi2, hi, delx, dely, delz,
-                   fx, fy, fz, x, v, angmom, f, torque, vwall);
+    // contact_forces(ibody, j_a, xpi2, hi, delx, dely, delz,
+    //                fx, fy, fz, x, v, angmom, f, torque, vwall);
+    if (force_flag == 0) {
+      double nu = c_n;
+      if (type[ibody] == 1) nu = c_n;
+      else if (type[ibody] == 2) nu = c_n * activity;
+      contact_forces_new(ibody, &cell, v[ibody], omega, f, torque, kn, nu, c_t, shift_flag);
+      force_flag = 1;
+    }
     discrete[ifirst+npi2][6] = 1;
     contact++;
     mode = VERTEX;
+  }
+
   }
 
   return mode;
@@ -691,14 +753,14 @@ int FixWallBodyPolyhedronAgent::compute_distance_to_wall(int ibody, int edge_ind
 ------------------------------------------------------------------------- */
 
 void FixWallBodyPolyhedronAgent::contact_forces(int ibody,
-  double j_a, double *xi, double * /*xj*/, double delx, double dely, double delz,
+  double j_a, double *xi, double *xj, double delx, double dely, double delz,
   double fx, double fy, double fz, double** x, double** v, double** angmom,
   double** f, double** torque, double* vwall)
 {
-  int ibonus;
+  int ibonus,jbonus;
   double fxt,fyt,fzt,rsq,rsqinv;
   double vr1,vr2,vr3,vnnr,vn1,vn2,vn3,vt1,vt2,vt3;
-  double fn[3],ft[3],vi[3];
+  double fn[3],ft[3],vi[3],vj[3];
   double *quat, *inertia;
   AtomVecBody::Bonus *bonus;
 
@@ -780,7 +842,7 @@ void FixWallBodyPolyhedronAgent::contact_forces(Contact& contact, double j_a,
                       double** x, double** v, double** angmom, double** f,
                       double** torque, double* vwall, double* facc)
 {
-  int ibody,ibonus,ifirst,ni;
+  int ibody,ibonus,ifirst, jefirst, ni;
   double fx,fy,fz,delx,dely,delz,rsq,rsqinv;
   double vr1,vr2,vr3,vnnr,vn1,vn2,vn3,vt1,vt2,vt3;
   double fn[3],ft[3],vi[3];

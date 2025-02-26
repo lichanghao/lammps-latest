@@ -54,6 +54,8 @@ class PairBodyRoundedPolyhedronAgent : public Pair {
  protected:
   double **k_n;        // normal repulsion strength
   double **k_na;       // normal attraction strength
+  double **hard_core_scaling; // scaling factor for hard-core contact
+  double **hard_core_threshold; // initial distance for hard-core contact
   double c_n;          // normal damping coefficient
   double c_t;          // tangential damping coefficient
   double mu;           // normal friction coefficient during gross sliding

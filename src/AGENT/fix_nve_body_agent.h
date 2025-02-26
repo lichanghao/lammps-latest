@@ -48,6 +48,7 @@ class FixNVEBodyAgent : public FixNVE {
   double coeff_nu_0_xy;          // fold of 3D env viscosity difference on x-y direction
   double coeff_nu_0_z;           // z_direction fold of env viscosity difference
   double z_damp_height;          // apply nu_0 difference above this height
+  double mass_scaling;
 
   double *growth_rates_all;      // peratom vector for growth rates
 

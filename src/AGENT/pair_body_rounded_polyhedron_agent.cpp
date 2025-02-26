@@ -120,6 +120,8 @@ PairBodyRoundedPolyhedronAgent::~PairBodyRoundedPolyhedronAgent()
 
     memory->destroy(k_n);
     memory->destroy(k_na);
+    memory->destroy(hard_core_scaling);
+    memory->destroy(hard_core_threshold);
   }
 }
 
@@ -342,6 +344,8 @@ void PairBodyRoundedPolyhedronAgent::allocate()
 
   memory->create(k_n,n+1,n+1,"pair:k_n");
   memory->create(k_na,n+1,n+1,"pair:k_na");
+  memory->create(hard_core_scaling,n+1,n+1,"pair:hard_core_scaling");
+  memory->create(hard_core_threshold,n+1,n+1,"pair:hard_core_threshold");
   memory->create(maxerad,n+1,"pair:maxerad");
 }
 
@@ -368,7 +372,7 @@ void PairBodyRoundedPolyhedronAgent::settings(int narg, char **arg)
 
 void PairBodyRoundedPolyhedronAgent::coeff(int narg, char **arg)
 {
-  if (narg < 4 || narg > 5)
+  if (narg < 4 || narg > 7)
     error->all(FLERR,"Incorrect args for pair coefficients");
   if (!allocated) allocate();
 
@@ -378,14 +382,21 @@ void PairBodyRoundedPolyhedronAgent::coeff(int narg, char **arg)
 
   double k_n_one = utils::numeric(FLERR,arg[2],false,lmp);
   double k_na_one = utils::numeric(FLERR,arg[3],false,lmp);
+  double hard_core_scaling_one = utils::numeric(FLERR,arg[4],false,lmp);
+  double hard_core_threshold_one = utils::numeric(FLERR,arg[5],false,lmp);
 
   int count = 0;
   for (int i = ilo; i <= ihi; i++) {
     for (int j = MAX(jlo,i); j <= jhi; j++) {
       k_n[i][j] = k_n_one;
       k_na[i][j] = k_na_one;
+      hard_core_scaling[i][j] = hard_core_scaling_one;
+      hard_core_threshold[i][j] = hard_core_threshold_one;
       setflag[i][j] = 1;
       count++;
+      printf("------------------ Pair_Body_Rounded_Polyhedron_Agent Parameters ------------------\n");
+      printf("Reading pair coefficients for types %d - %d\n: k_n = %f, k_na = %f, hard_core_scaling = %f, hard_core_threshold = %f\n", 
+             i, j, k_n[i][j], k_na[i][j], hard_core_scaling[i][j], hard_core_threshold[i][j]);
     }
   }
 
@@ -503,6 +514,8 @@ double PairBodyRoundedPolyhedronAgent::init_one(int i, int j)
 {
   k_n[j][i] = k_n[i][j];
   k_na[j][i] = k_na[i][j];
+  hard_core_scaling[j][i] = hard_core_scaling[i][j];
+  hard_core_threshold[j][i] = hard_core_threshold[i][j];
 
   return (maxerad[i]+maxerad[j]);
 }
@@ -1566,12 +1579,15 @@ void PairBodyRoundedPolyhedronAgent::kernel_force(double R, int itype, int jtype
 {
   double kn = k_n[itype][jtype];
   double kna = k_na[itype][jtype];
+  double hc_scaling = hard_core_scaling[itype][jtype];
+  double hc_threshold = hard_core_threshold[itype][jtype];
   double shift = kna * cut_inner;
   double e = 0;
   if (R <= 0) {           // deformation occurs
     fpair = -kn * R - shift + kna * std::sqrt(std::abs(R));
-    if (R <= -0.3) {
-      fpair += -50 * kn * (R + 0.3) - shift + kna * std::sqrt(std::abs(R));
+    if (R <= -hc_threshold) {
+      fpair = -kn * (-hc_threshold) - shift + kna * std::sqrt(std::abs(R));
+      fpair += -hc_scaling * kn * (R + hc_threshold);
     }
     e = (0.5 * kn * R + shift) * R;
   } else if (R <= cut_inner) {   // not deforming but cohesive ranges overlap

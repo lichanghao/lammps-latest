@@ -15,7 +15,7 @@
 /* ----------------------------------------------------------------------
    Agent-based simulation for bacteria biofilms
    Author: Changhao Li (changhaoli1997@gmail.com)
-   Last updated: 02/03/2025
+   Last updated: 02/26/2025
 ------------------------------------------------------------------------- */
 
 #include <cmath>
@@ -32,10 +32,10 @@
 using namespace LAMMPS_NS;
 using namespace FixConst;
 
-#define INITIAL_MASS 1e-3
-#define INITIAL_INERTIA_x 5e-4
-#define INITIAL_INERTIA_y 1.2708e-4
-#define INITIAL_INERTIA_z 1.2708e-4
+#define INITIAL_MASS (1e-3*mass_scaling)
+#define INITIAL_INERTIA_x (5e-4*mass_scaling)
+#define INITIAL_INERTIA_y (1.2708e-4*mass_scaling)
+#define INITIAL_INERTIA_z (1.2708e-4*mass_scaling)
 #define RANDOM_SEED 2189634
 #define FORCE_RENEIGHBOR_INTERVAL 1
 
@@ -166,20 +166,24 @@ void FixNVEBodyAgent::initial_integrate(int /*vflag*/)
       // apply infinitesimal noise to break symmetry
       add_noise(f[i], torque[i], noise_level);
 
+      // at the beginning, assign all cell types = 1
+      if (update->ntimestep == 1) {
+        type[i] = 1;
+      }
+
       // assign mutant type
-      double probability_HL = 0.125;
-      double probability_LH = 0.125;
+      double probability_HL = kHL;
+      double probability_LH = kLH;
       if (type[i] == 1) {
-        if (random->uniform() < probability_HL * dtf) {
+        if (random->uniform() < probability_HL * dtf * 2) {
             type[i] = 2;
           }
       }
       else if (type[i] == 2) {
-        if (random->uniform() < probability_LH * dtf) {
+        if (random->uniform() < probability_LH * dtf * 2) {
             type[i] = 1;
         }
       }
-
 
       // update velocity by full step, displacement by 1/2 step
       v[i][0] += dtfm * f[i][0];
@@ -336,7 +340,7 @@ void FixNVEBodyAgent::proliferate_single_body(int ibody, bool &is_dividing)
     body[new_body_index] = 0;
     int int_temp[3] = {2, 0, 0};                       // default values for the int array (number of nodes, edges, and faces) of the new body
     double double_temp[13] = {INITIAL_INERTIA_x, INITIAL_INERTIA_y, INITIAL_INERTIA_z, 0.000000e+00, 0.000000e+00, 0.000000e+00,
-                              -1.250000, 0.000000, 0.000000, 1.250000, 0.000000, 0.000000, 2.000000}; // default values for the double array (coordinates for nodes, and other stuff) of the new body 
+                              (L_max-2*r)/4.0, 0.000000, 0.000000, (L_max-2*r)/4.0, 0.000000, 0.000000, 2.000000}; // default values for the double array (coordinates for nodes, and other stuff) of the new body 
     avec->data_body(new_body_index, 3, 13, int_temp, double_temp); // directly call the datareader function to avoid memory problems
     avec->deep_copy_bonus(body[ibody], body[new_body_index]);      // setup bonus values
 
@@ -445,9 +449,6 @@ void FixNVEBodyAgent::apply_damping_force(int ibody, double *omega, double **f, 
   double R = radius(bonus[body[ibody]].dvalue, 2);
 
   double temp_nu_0 = nu_0;
-  if (type[ibody] == 2) {
-    temp_nu_0 = nu_0 * 0.01;
-  }
 
   // adding damping force, applying on mass center
   f[ibody][0] += -temp_nu_0 * (L+4.0/3.0*R) * v[0];
@@ -669,9 +670,11 @@ void FixNVEBodyAgent::read_params(int narg, char **arg)
   coeff_nu_0_xy = 1;
   coeff_nu_0_z = 1;
   z_damp_height = 0;
+  mass_scaling = 1;
 
   if (narg != 3 && narg != 6 && narg != 8 && narg != 10 && narg != 12 && 
-      narg != 14 && narg != 16 && narg != 18 && narg != 20 && narg != 22) {
+      narg != 14 && narg != 16 && narg != 18 && narg != 20 && narg != 22 &&
+      narg != 24) {
     error->all(FLERR, "Invalid fix nve/body/agent command, incorrect number of input parameters");
   }
 
@@ -703,17 +706,21 @@ void FixNVEBodyAgent::read_params(int narg, char **arg)
     {
       kHL = utils::numeric(FLERR, arg[i + 1], false, lmp);
     }
-    if (strcmp(arg[i], "c_nu_0_xy") == 0)
+    if (strcmp(arg[i], "activity") == 0)
     {
       coeff_nu_0_xy = utils::numeric(FLERR, arg[i + 1], false, lmp);
     }
-    if (strcmp(arg[i], "c_nu_0_z") == 0)
+    if (strcmp(arg[i], "z_activity") == 0)
     {
       coeff_nu_0_z = utils::numeric(FLERR, arg[i + 1], false, lmp);
     }
     if (strcmp(arg[i], "z_damp_height") == 0)
     {
       z_damp_height = utils::numeric(FLERR, arg[i + 1], false, lmp);
+    }
+    if (strcmp(arg[i], "mass_scaling") == 0)
+    {
+      mass_scaling = utils::numeric(FLERR, arg[i + 1], false, lmp);
     }
   }
 
