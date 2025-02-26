@@ -373,7 +373,7 @@ double contact_area_density(Cell *cell_1, double rr)
    needed to be translated to moment in space fixed frame
 ------------------------------------------------------------------------- */
 
-void contact_forces_new(int ibody, Cell *cell, double *v, double *omega, double **f, double **torque, double kn, double cn, double ct, int shift_flag)
+void contact_forces_new(int ibody, Cell *cell, double *v, double *omega, double **f, double **torque, double kn, double cn, double ct, int shift_flag, double hard_core_scaling, double hard_core_threshold)
 {
 	double A = ct;
 	my6Vec force_and_torque = cell_surface_gforce(cell, kn, A);
@@ -403,9 +403,9 @@ void contact_forces_new(int ibody, Cell *cell, double *v, double *omega, double 
 	double h1 = z + L * nz / 2.0;
 	double h2 = z - L * nz / 2.0;
 	double d_approx = min(h1, h2) - 1;
-	if (d_approx < -0.375) {
-		f[ibody][2] += 100 * kn * (abs(d_approx) - 0.375);
-		// printf("Hello, h1: %f, h2: %f, d_approx: %f\n", h1, h2, d_approx);
+	if (d_approx < -hard_core_threshold) {
+		f[ibody][2] += hard_core_scaling * kn * (abs(d_approx) - hard_core_threshold);
+		// printf("Warning: augmented surface z-force, h1: %f, h2: %f, d_approx: %f\n", h1, h2, d_approx);
 	}
 
 	// compute surface damping force and momentum

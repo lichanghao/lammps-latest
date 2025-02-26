@@ -394,7 +394,7 @@ void PairBodyRoundedPolyhedronAgent::coeff(int narg, char **arg)
       hard_core_threshold[i][j] = hard_core_threshold_one;
       setflag[i][j] = 1;
       count++;
-      printf("------------------ Pair_Body_Rounded_Polyhedron_Agent Parameters ------------------\n");
+      printf("\n------------------ Pair_Body_Rounded_Polyhedron_Agent Parameters ------------------\n");
       printf("Reading pair coefficients for types %d - %d\n: k_n = %f, k_na = %f, hard_core_scaling = %f, hard_core_threshold = %f\n", 
              i, j, k_n[i][j], k_na[i][j], hard_core_scaling[i][j], hard_core_threshold[i][j]);
     }

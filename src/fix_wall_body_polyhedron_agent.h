@@ -50,7 +50,7 @@ class FixWallBodyPolyhedronAgent : public Fix {
 
  protected:
   int wallstyle,pairstyle,wiggle,axis;
-  double kn,c_n,c_t;
+  double kn,c_n,c_t,hard_core_scaling,hard_core_threshold;
   double lo,hi,cylradius;
   double amplitude,period,omega;
   double dt;

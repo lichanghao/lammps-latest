@@ -112,6 +112,8 @@ FixWallBodyPolyhedronAgent::FixWallBodyPolyhedronAgent(LAMMPS *lmp, int narg, ch
 
   wiggle = 0;
   activity = -1;
+  hard_core_scaling = 1;
+  hard_core_threshold = 1E8;
   while (iarg < narg) {
     if (strcmp(arg[iarg],"wiggle") == 0) {
       if (iarg+4 > narg) error->all(FLERR,"Illegal fix wall/body/polyhedron command");
@@ -126,8 +128,19 @@ FixWallBodyPolyhedronAgent::FixWallBodyPolyhedronAgent(LAMMPS *lmp, int narg, ch
     } else if (strcmp(arg[iarg], "activity") == 0) {
       activity = utils::numeric(FLERR, arg[iarg + 1],false,lmp);
       iarg += 2;
+    } else if (strcmp(arg[iarg], "hard_core_scaling") == 0) {
+      hard_core_scaling = utils::numeric(FLERR, arg[iarg + 1],false,lmp);
+      iarg += 2;
+    } else if (strcmp(arg[iarg], "hard_core_threshold") == 0) {
+      hard_core_threshold = utils::numeric(FLERR, arg[iarg + 1],false,lmp);
+      iarg += 2;
     } else error->all(FLERR,"Illegal fix wall/body/polyhedron command");
   }
+
+  printf("\n------------------ Fix_Wall_Body_Polyhedron_Agent Parameters ------------------\n");
+  printf("E_surface = %f, eta_1 = %f, Sigma_0 = %f\n", kn, c_n, c_t);
+  printf("hc_scaling = %f, hc_threshold = %f\n", hard_core_scaling, hard_core_threshold);
+  printf("-------------------------------------------------------------------------------\n\n");
 
   if (wallstyle == XPLANE && domain->xperiodic)
     error->all(FLERR,"Cannot use wall in periodic dimension");
@@ -689,7 +702,7 @@ int FixWallBodyPolyhedronAgent::compute_distance_to_wall(int ibody, int edge_ind
       double nu = c_n;
       if (type[ibody] == 1) nu = c_n;
       else if (type[ibody] == 2) nu = c_n * activity;
-      contact_forces_new(ibody, &cell, v[ibody], omega, f, torque, kn, nu, c_t, shift_flag);
+      contact_forces_new(ibody, &cell, v[ibody], omega, f, torque, kn, nu, c_t, shift_flag, hard_core_scaling, hard_core_threshold);
       force_flag = 1;
     }
     discrete[ifirst+npi1][6] = 1;
@@ -731,7 +744,7 @@ int FixWallBodyPolyhedronAgent::compute_distance_to_wall(int ibody, int edge_ind
       double nu = c_n;
       if (type[ibody] == 1) nu = c_n;
       else if (type[ibody] == 2) nu = c_n * activity;
-      contact_forces_new(ibody, &cell, v[ibody], omega, f, torque, kn, nu, c_t, shift_flag);
+      contact_forces_new(ibody, &cell, v[ibody], omega, f, torque, kn, nu, c_t, shift_flag, hard_core_scaling, hard_core_threshold);
       force_flag = 1;
     }
     discrete[ifirst+npi2][6] = 1;
