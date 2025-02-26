@@ -146,6 +146,7 @@ void FixNVEBodyAgent::initial_integrate(int /*vflag*/)
   double *rmass = atom->rmass;
   int *mask = atom->mask;
   int nlocal = atom->nlocal;
+  int *type = atom->type;
   if (igroup == atom->firstgroup) nlocal = atom->nfirst;
 
   // set timestep here since dt may have changed or come via rRESPA
@@ -164,6 +165,21 @@ void FixNVEBodyAgent::initial_integrate(int /*vflag*/)
       
       // apply infinitesimal noise to break symmetry
       add_noise(f[i], torque[i], noise_level);
+
+      // assign mutant type
+      double probability_HL = 0.125;
+      double probability_LH = 0.125;
+      if (type[i] == 1) {
+        if (random->uniform() < probability_HL * dtf) {
+            type[i] = 2;
+          }
+      }
+      else if (type[i] == 2) {
+        if (random->uniform() < probability_LH * dtf) {
+            type[i] = 1;
+        }
+      }
+
 
       // update velocity by full step, displacement by 1/2 step
       v[i][0] += dtfm * f[i][0];
@@ -424,10 +440,14 @@ void FixNVEBodyAgent::apply_damping_force(int ibody, double *omega, double **f, 
   AtomVecBody::Bonus *bonus = avec->bonus;
   double *v = (atom->v)[ibody];
   int *body = atom->body;
+  int *type = atom->type;
   double L = length(bonus[body[ibody]].dvalue);
   double R = radius(bonus[body[ibody]].dvalue, 2);
 
   double temp_nu_0 = nu_0;
+  if (type[ibody] == 2) {
+    temp_nu_0 = nu_0 * 0.01;
+  }
 
   // adding damping force, applying on mass center
   f[ibody][0] += -temp_nu_0 * (L+4.0/3.0*R) * v[0];
@@ -473,7 +493,8 @@ void FixNVEBodyAgent::add_noise(double *f, double *mom, double given_noise_level
 
 double FixNVEBodyAgent::radius(double *data, int nvert)
 {
-  return data[nvert * 3 + 2 + 1];
+  // this is only correct for rod-like bodies with 2 nodes, 0 edges and 0 faces
+  return data[nvert * 3 + 2 + 1]; 
 }
 
 
@@ -483,6 +504,7 @@ double FixNVEBodyAgent::radius(double *data, int nvert)
 
 double FixNVEBodyAgent::length(double *data)
 {
+  // this is only correct for rod-like bodies with 2 nodes, 0 edges and 0 faces
   return sqrt(std::pow(data[3] - data[0], 2) + std::pow(data[4] - data[1], 2) + std::pow(data[5] - data[2], 2));
 }
 
