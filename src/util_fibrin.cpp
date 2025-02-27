@@ -399,14 +399,14 @@ void contact_forces_new(int ibody, Cell *cell, double *v, double *omega, double 
 	torque[ibody][2] += cell_torque[2];
 
 	// approximation to the hard core potential
-	double z = cell->get_z();
-	double h1 = z + L * nz / 2.0;
-	double h2 = z - L * nz / 2.0;
-	double d_approx = min(h1, h2) - 1;
-	if (d_approx < -hard_core_threshold) {
-		f[ibody][2] += hard_core_scaling * kn * (abs(d_approx) - hard_core_threshold);
-		// printf("Augmented surface z-force, h1: %f, h2: %f, d_approx: %f\n", h1, h2, d_approx);
-	}
+	// double z = cell->get_z();
+	// double h1 = z + L * nz / 2.0;
+	// double h2 = z - L * nz / 2.0;
+	// double d_approx = min(h1, h2) - 1;
+	// if (d_approx < -hard_core_threshold) {
+	// 	f[ibody][2] += hard_core_scaling * kn * (abs(d_approx) - hard_core_threshold);
+	// 	// printf("Warning: augmented surface z-force, h1: %f, h2: %f, d_approx: %f\n", h1, h2, d_approx);
+	// }
 
 	// compute surface damping force and momentum
 	double nu_1 = cn;

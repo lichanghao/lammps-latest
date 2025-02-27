@@ -34,6 +34,7 @@
 #include "math_extra.h"
 #include "memory.h"
 #include "error.h"
+#include "comm.h"
 
 #include "util_fibrin.h"
 
@@ -136,11 +137,12 @@ FixWallBodyPolyhedronAgent::FixWallBodyPolyhedronAgent(LAMMPS *lmp, int narg, ch
       iarg += 2;
     } else error->all(FLERR,"Illegal fix wall/body/polyhedron command");
   }
-
-  printf("\n------------------ Fix_Wall_Body_Polyhedron_Agent Parameters ------------------\n");
-  printf("E_surface = %f, eta_1 = %f, Sigma_0 = %f\n", kn, c_n, c_t);
-  printf("hc_scaling = %f, hc_threshold = %f\n", hard_core_scaling, hard_core_threshold);
-  printf("-------------------------------------------------------------------------------\n\n");
+  if (comm->me == 0) {
+    printf("\n------------------ Fix_Wall_Body_Polyhedron_Agent Parameters ------------------\n");
+    printf("E_surface = %f, eta_1 = %f, Sigma_0 = %f\n", kn, c_n, c_t);
+    printf("hc_scaling = %f, hc_threshold = %f\n", hard_core_scaling, hard_core_threshold);
+    printf("-------------------------------------------------------------------------------\n\n");
+  }
 
   if (wallstyle == XPLANE && domain->xperiodic)
     error->all(FLERR,"Cannot use wall in periodic dimension");

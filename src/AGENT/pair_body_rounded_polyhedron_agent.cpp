@@ -394,9 +394,11 @@ void PairBodyRoundedPolyhedronAgent::coeff(int narg, char **arg)
       hard_core_threshold[i][j] = hard_core_threshold_one;
       setflag[i][j] = 1;
       count++;
-      printf("\n------------------ Pair_Body_Rounded_Polyhedron_Agent Parameters ------------------\n");
-      printf("Reading pair coefficients for types %d - %d\n: k_n = %f, k_na = %f, hard_core_scaling = %f, hard_core_threshold = %f\n", 
+      if (comm->me == 0) {
+        printf("\n------------------ Pair_Body_Rounded_Polyhedron_Agent Parameters ------------------\n");
+        printf("Reading pair coefficients for types %d - %d\n: k_n = %f, k_na = %f, hard_core_scaling = %f, hard_core_threshold = %f\n", 
              i, j, k_n[i][j], k_na[i][j], hard_core_scaling[i][j], hard_core_threshold[i][j]);
+      }
     }
   }
 
@@ -1585,10 +1587,10 @@ void PairBodyRoundedPolyhedronAgent::kernel_force(double R, int itype, int jtype
   double e = 0;
   if (R <= 0) {           // deformation occurs
     fpair = -kn * R - shift + kna * std::sqrt(std::abs(R));
-    if (R <= -hc_threshold) {
-      fpair = -kn * (-hc_threshold) - shift + kna * std::sqrt(std::abs(R));
-      fpair += -hc_scaling * kn * (R + hc_threshold);
-    }
+    // if (R <= -hc_threshold) {
+    //   fpair = -kn * (-hc_threshold) - shift + kna * std::sqrt(std::abs(R));
+    //   fpair += -hc_scaling * kn * (R + hc_threshold);
+    // }
     e = (0.5 * kn * R + shift) * R;
   } else if (R <= cut_inner) {   // not deforming but cohesive ranges overlap
     // fpair = kna * R - shift;

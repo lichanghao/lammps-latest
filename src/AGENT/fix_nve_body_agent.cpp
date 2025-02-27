@@ -36,7 +36,7 @@ using namespace FixConst;
 #define INITIAL_INERTIA_x (5e-4*mass_scaling)
 #define INITIAL_INERTIA_y (1.2708e-4*mass_scaling)
 #define INITIAL_INERTIA_z (1.2708e-4*mass_scaling)
-#define RANDOM_SEED 2189634
+#define MAX_TAG 10000000
 #define FORCE_RENEIGHBOR_INTERVAL 1
 
 // #define FIX_NVE_BODY_AGENT_DEBUG
@@ -56,8 +56,9 @@ FixNVEBodyAgent::FixNVEBodyAgent(LAMMPS *lmp, int narg, char **arg) :
   // read parameters from input files
   read_params(narg, arg);
 
-  // random generator (seed = RANDOM_SEED + processor_id)
-  random = new RanPark(lmp, RANDOM_SEED + comm->me);
+  // random generator (seed = current time + processor_id)
+  int seed = static_cast<int> (time(NULL));
+  random = new RanPark(lmp, seed + comm->me);
 
   // initiate peratom vector for growth rates, Gaussian distribution ~ N(growth_rate, growth_standard_dev)
   nmax = atom->nmax;
@@ -168,7 +169,7 @@ void FixNVEBodyAgent::initial_integrate(int /*vflag*/)
 
       // at the beginning, assign all cell types = 1
       if (update->ntimestep == 1) {
-        type[i] = 1;
+        if (type[i] == 2) type[i] = 1;
       }
 
       // assign mutant type
@@ -238,7 +239,7 @@ void FixNVEBodyAgent::pre_exchange()
         // tag > 1e6 will cause segmentation fault if you use array style atom map
         // should use hash style atom map instead to avoid this problem
         tagint newtag = maxtag_all + static_cast<tagint>(random->uniform() * (MAXTAGINT - maxtag_all));
-        atom->tag[atom->nlocal - nadded] = newtag;
+        atom->tag[atom->nlocal - nadded] = newtag % MAX_TAG;
       }
     }
   }
@@ -479,12 +480,12 @@ void FixNVEBodyAgent::apply_damping_force(int ibody, double *omega, double **f, 
 
 void FixNVEBodyAgent::add_noise(double *f, double *mom, double given_noise_level)
 {
-  f[0] += 1 * given_noise_level * (rand() / (static_cast<double>(RAND_MAX)) - 0.5);
-  f[1] += 1 * given_noise_level * (rand() / (static_cast<double>(RAND_MAX)) - 0.5);
-  f[2] += 1 * given_noise_level * (rand() / (static_cast<double>(RAND_MAX)) - 0.5);
-  mom[0] += given_noise_level * (rand() / (static_cast<double>(RAND_MAX)) - 0.5);
-  mom[1] += given_noise_level * (rand() / (static_cast<double>(RAND_MAX)) - 0.5);
-  mom[2] += given_noise_level * (rand() / (static_cast<double>(RAND_MAX)) - 0.5);
+  f[0] += 1 * given_noise_level * (random->uniform() - 0.5);
+  f[1] += 1 * given_noise_level * (random->uniform() - 0.5);
+  f[2] += 1 * given_noise_level * (random->uniform() - 0.5);
+  mom[0] += given_noise_level * (random->uniform() - 0.5);
+  mom[1] += given_noise_level * (random->uniform() - 0.5);
+  mom[2] += given_noise_level * (random->uniform() - 0.5);
 }
 
 
