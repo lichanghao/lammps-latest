@@ -176,7 +176,7 @@ my6Vec cell_surface_gforce(Cell *cell_1, double kn, double A)
 		// cout << "rix: " << rix << " riy: " << riy << " riz: " << riz << " rinx: " << rinx << " riny: " << riny << " rinz: " << rinz << endl;
 		// cout << "h1: " << h1 << " h2: " << h2 << endl;
 		F.nz += 0;
-		F.z += E_1 * abs(h1) * sqrt(abs(h1));
+		// F.z += E_1 * abs(h1) * sqrt(abs(h1));
 		return F;
 	}
 
