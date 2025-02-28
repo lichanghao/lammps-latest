@@ -1591,7 +1591,7 @@ void PairBodyRoundedPolyhedronAgent::kernel_force(double R, int itype, int jtype
       fpair = -kn * (-hc_threshold) * std::sqrt(std::abs(hc_threshold)) - shift + kna * std::sqrt(std::abs(R));
       fpair += -hc_scaling * kn * (R + hc_threshold) * std::sqrt(std::abs(R + hc_threshold));
     }
-    e = (0.5 * kn * R + shift) * R;
+    e = (0.5 * kn * R + shift) * R * std::sqrt(std::abs(R));
   } else if (R <= cut_inner) {   // not deforming but cohesive ranges overlap
     // fpair = kna * R - shift;
     // e = (-0.5 * kna * R + shift) * R;

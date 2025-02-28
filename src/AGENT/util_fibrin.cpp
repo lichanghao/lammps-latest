@@ -173,8 +173,10 @@ my6Vec cell_surface_gforce(Cell *cell_1, double kn, double A)
 	else
 	{
 		// cout << "ERROR: Torque is below the ground!" << endl;
+		// cout << "rix: " << rix << " riy: " << riy << " riz: " << riz << " rinx: " << rinx << " riny: " << riny << " rinz: " << rinz << endl;
+		// cout << "h1: " << h1 << " h2: " << h2 << endl;
 		F.nz += 0;
-		F.z += 0.01;
+		F.z += E_1 * abs(h1) * sqrt(abs(h1));
 		return F;
 	}
 
@@ -237,7 +239,6 @@ int cell_contact(Cell* cell_1) {
 		// cout << "Error, below ground in cell contact?" << endl;
 		// return 0;
 		return 1;
-
 	}
 }
 
@@ -399,14 +400,14 @@ void contact_forces_new(int ibody, Cell *cell, double *v, double *omega, double 
 	torque[ibody][2] += cell_torque[2];
 
 	// approximation to the hard core potential
-	// double z = cell->get_z();
-	// double h1 = z + L * nz / 2.0;
-	// double h2 = z - L * nz / 2.0;
-	// double d_approx = min(h1, h2) - 1;
-	// if (d_approx < -hard_core_threshold) {
-	// 	f[ibody][2] += hard_core_scaling * kn * (abs(d_approx) - hard_core_threshold);
-	// 	// printf("Warning: augmented surface z-force, h1: %f, h2: %f, d_approx: %f\n", h1, h2, d_approx);
-	// }
+	double z = cell->get_z();
+	double h1 = z + L * nz / 2.0;
+	double h2 = z - L * nz / 2.0;
+	double d_approx = min(h1, h2) - 1;
+	if (d_approx < -hard_core_threshold) {
+		f[ibody][2] += hard_core_scaling * kn * (abs(d_approx) - hard_core_threshold) * (abs(d_approx) - hard_core_threshold);
+		// printf("Warning: augmented surface z-force, h1: %f, h2: %f, d_approx: %f\n", h1, h2, d_approx);
+	}
 
 	// compute surface damping force and momentum
 	double nu_1 = cn;

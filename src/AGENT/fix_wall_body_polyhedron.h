@@ -11,28 +11,23 @@
    See the README file in the top-level LAMMPS directory.
 ------------------------------------------------------------------------- */
 
-/* ----------------------------------------------------------------------
-   Modified by Changhao Li (czl478@psu.edu, changhaoli1997@gmail.com) for
-   modeling of bacteria film. Last modified date: 06/30/2020
-------------------------------------------------------------------------- */
-
 #ifdef FIX_CLASS
 // clang-format off
-FixStyle(wall/body/polyhedron/agent,FixWallBodyPolyhedronAgent);
+FixStyle(wall/body/polyhedron,FixWallBodyPolyhedron);
 // clang-format on
 #else
 
-#ifndef LMP_FIX_WALL_BODY_POLYHERON_AGENT_H
-#define LMP_FIX_WALL_BODY_POLYHERON_AGENT_H
+#ifndef LMP_FIX_WALL_BODY_POLYHERON_H
+#define LMP_FIX_WALL_BODY_POLYHERON_H
 
 #include "fix.h"
 
 namespace LAMMPS_NS {
 
-class FixWallBodyPolyhedronAgent : public Fix {
+class FixWallBodyPolyhedron : public Fix {
  public:
-  FixWallBodyPolyhedronAgent(class LAMMPS *, int, char **);
-  ~FixWallBodyPolyhedronAgent() override;
+  FixWallBodyPolyhedron(class LAMMPS *, int, char **);
+  ~FixWallBodyPolyhedron() override;
   int setmask() override;
   void init() override;
   void setup(int) override;
@@ -49,7 +44,6 @@ class FixWallBodyPolyhedronAgent : public Fix {
   };
 
  protected:
-  double activity, hard_core_scaling, hard_core_threshold;
   int wallstyle, pairstyle, wiggle, axis;
   double kn, c_n, c_t;
   double lo, hi, cylradius;
@@ -58,7 +52,7 @@ class FixWallBodyPolyhedronAgent : public Fix {
   int time_origin;
 
   class AtomVecBody *avec;
-  class BodyRoundedPolyhedronAgent *bptr;
+  class BodyRoundedPolyhedron *bptr;
 
   double **discrete;    // list of all sub-particles for all bodies
   int ndiscrete;        // number of discretes in list
