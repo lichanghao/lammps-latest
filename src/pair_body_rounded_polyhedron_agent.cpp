@@ -824,19 +824,25 @@ void PairBodyRoundedPolyhedronAgent::sphere_against_edge(int ibody, int jbody,
       vt1 = vr1 - vn1;
       vt2 = vr2 - vn2;
       vt3 = vr3 - vn3;
+      
+      double friction = 0;
+      if ((itype == 1 && jtype == 3) || (itype == 3 && jtype == 1)) {
+        friction = 1;
+        // printf("friction = %f\n", friction);
+      }
 
       // normal friction term at contact
 
-      fn[0] = -c_n * vn1;
-      fn[1] = -c_n * vn2;
-      fn[2] = -c_n * vn3;
+      fn[0] = -c_n * vn1 * std::sqrt(std::abs(R)) * friction;
+      fn[1] = -c_n * vn2 * std::sqrt(std::abs(R)) * friction;
+      fn[2] = -c_n * vn3 * std::sqrt(std::abs(R)) * friction;
 
       // tangential friction term at contact,
       // excluding the tangential deformation term
 
-      ft[0] = -c_t * vt1;
-      ft[1] = -c_t * vt2;
-      ft[2] = -c_t * vt3;
+      ft[0] = -c_t * vt1 * std::sqrt(std::abs(R)) * friction;
+      ft[1] = -c_t * vt2 * std::sqrt(std::abs(R)) * friction;
+      ft[2] = -c_t * vt3 * std::sqrt(std::abs(R)) * friction;
 
       fx += fn[0] + ft[0];
       fy += fn[1] + ft[1];
@@ -1665,16 +1671,16 @@ void PairBodyRoundedPolyhedronAgent::contact_forces(int ibody, int jbody,
 
   // normal friction term at contact
 
-  fn[0] = -c_n * vn1;
-  fn[1] = -c_n * vn2;
-  fn[2] = -c_n * vn3;
+  fn[0] = -c_n * vn1 * 0;
+  fn[1] = -c_n * vn2 * 0;
+  fn[2] = -c_n * vn3 * 0;
 
   // tangential friction term at contact
   // excluding the tangential deformation term for now
 
-  ft[0] = -c_t * vt1;
-  ft[1] = -c_t * vt2;
-  ft[2] = -c_t * vt3;
+  ft[0] = -c_t * vt1 * 0;
+  ft[1] = -c_t * vt2 * 0;
+  ft[2] = -c_t * vt3 * 0;
 
   // these are contact forces (F_n, F_t and F_ne) only
   // cohesive forces will be scaled by j_a after contact area is computed
