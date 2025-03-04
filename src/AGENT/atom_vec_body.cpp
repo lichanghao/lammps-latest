@@ -558,6 +558,7 @@ void AtomVecBody::data_body(int m, int ninteger, int ndouble, int *ivalues, doub
 {
   if (body[m]) error->one(FLERR, "Assigning body parameters to non-body atom");
   if (nlocal_bonus == nmax_bonus) grow_bonus();
+  grow_pointers();
   bonus[nlocal_bonus].ilocal = m;
   bptr->data_body(nlocal_bonus, ninteger, ndouble, ivalues, dvalues);
   body[m] = nlocal_bonus++;
@@ -619,12 +620,12 @@ void AtomVecBody::deep_copy_bonus(int ibonus, int jbonus)
   bonus[jbonus].ndouble = bonus[ibonus].ndouble;
   for (int i = 0; i < 4; i++)
   {
-    if (bonus[jbonus].quat) bonus[jbonus].quat[i] = bonus[ibonus].quat[i];
+    if (bonus[jbonus].quat != nullptr) bonus[jbonus].quat[i] = bonus[ibonus].quat[i];
     else printf("AtomVecBody::deep_copy_bonus(): Warning, NULL ptr for bonus.quat\n");
   }
   for (int i = 0; i < 3; i++)
   {
-    if (bonus[jbonus].inertia) bonus[jbonus].inertia[i] = bonus[ibonus].inertia[i];
+    if (bonus[jbonus].inertia != nullptr) bonus[jbonus].inertia[i] = bonus[ibonus].inertia[i];
     else printf("AtomVecBody::deep_copy_bonus(): Warning, NULL ptr for bonus.inertia\n");
   }
   bonus[jbonus].ivalue = icp->get(bonus[jbonus].ninteger, bonus[jbonus].iindex);

@@ -681,9 +681,16 @@ int FixWallBodyPolyhedronAgent::compute_distance_to_wall(int ibody, int edge_ind
     //                fx, fy, fz, x, v, angmom, f, torque, vwall);
     if (force_flag == 0) {
       double nu = 0;
-      if (type[ibody] == 1) nu = c_n;
-      else if (type[ibody] == 2) nu = c_n * activity;
-      contact_forces_new(ibody, &cell, v[ibody], omega, f, torque, kn, nu, c_t, 0, hard_core_scaling, hard_core_threshold);
+      double A = 0;
+      if (type[ibody] == 1) {
+        nu = c_n;
+        A = c_t;
+      }
+      else if (type[ibody] == 2) {
+        nu = c_n * activity;
+        A = c_t * activity;
+      }
+      contact_forces_new(ibody, &cell, v[ibody], omega, f, torque, kn, nu, A, 0, hard_core_scaling, hard_core_threshold);
       force_flag = 1;
     }
 

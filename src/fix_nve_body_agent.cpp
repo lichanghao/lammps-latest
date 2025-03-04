@@ -36,7 +36,7 @@ using namespace FixConst;
 #define INITIAL_INERTIA_x (5e-4*mass_scaling)
 #define INITIAL_INERTIA_y (1.2708e-4*mass_scaling)
 #define INITIAL_INERTIA_z (1.2708e-4*mass_scaling)
-#define MAX_TAG 10000000
+#define MAX_TAG 9E8
 #define FORCE_RENEIGHBOR_INTERVAL 1
 
 // #define FIX_NVE_BODY_AGENT_DEBUG
@@ -77,6 +77,7 @@ FixNVEBodyAgent::FixNVEBodyAgent(LAMMPS *lmp, int narg, char **arg) :
 
   // find maximum id across all processors
   find_maxid();
+  // printf("maxid = %d\n", maxtag_all);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -235,15 +236,11 @@ void FixNVEBodyAgent::pre_exchange()
       proliferate_single_body(i, any_division);
       if (any_division) {
         nadded++; 
-        // note: currently tag is randomly initialized from INT_MAX to the initial maxtag_all
-        // tag > 1e6 will cause segmentation fault if you use array style atom map
-        // should use hash style atom map instead to avoid this problem
-        tagint newtag = maxtag_all + static_cast<tagint>(random->uniform() * (MAXTAGINT - maxtag_all));
-        atom->tag[atom->nlocal - nadded] = newtag % MAX_TAG;
       }
     }
   }
-
+  
+  // rebuild atom maps
   if (atom->map_style != Atom::MAP_NONE) {
     atom->map_init(1);
     atom->map_set();
@@ -344,6 +341,13 @@ void FixNVEBodyAgent::proliferate_single_body(int ibody, bool &is_dividing)
                               (L_max-2*r)/4.0, 0.000000, 0.000000, (L_max-2*r)/4.0, 0.000000, 0.000000, 2.000000}; // default values for the double array (coordinates for nodes, and other stuff) of the new body 
     avec->data_body(new_body_index, 3, 13, int_temp, double_temp); // directly call the datareader function to avoid memory problems
     avec->deep_copy_bonus(body[ibody], body[new_body_index]);      // setup bonus values
+    
+    // note: currently tag is randomly initialized from INT_MAX to the initial maxtag_all
+    // tag > 1e6 will cause segmentation fault if you use array style atom map
+    // should use hash style atom map instead to avoid this problem
+    tagint newtag = maxtag_all + static_cast<tagint>(random->uniform() * (MAX_TAG - maxtag_all));
+    atom->tag[new_body_index] = newtag;
+    // atom->tag[new_body_index] = -1;
 
     // forcing no net external forces
     set_force(ibody, 0, 0, 0, 0, 0, 0);
