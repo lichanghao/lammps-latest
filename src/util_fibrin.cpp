@@ -408,6 +408,20 @@ void contact_forces_new(int ibody, Cell *cell, double *v, double *omega, double 
 		f[ibody][2] += hard_core_scaling * kn * (abs(d_approx) - hard_core_threshold) * (abs(d_approx) - hard_core_threshold);
 		// printf("Warning: augmented surface z-force, h1: %f, h2: %f, d_approx: %f\n", h1, h2, d_approx);
 	}
+	// if (h1 - 1 < -hard_core_threshold) {
+	// 	double d_approx = h1 - 1;
+	// 	double wall_hard_core_force = hard_core_scaling * kn * (abs(d_approx) - hard_core_threshold) * (abs(d_approx) - hard_core_threshold);
+	// 	f[ibody][2] += wall_hard_core_force;
+	// 	// torque[ibody][0] += cross(L * nx / 2.0, L * ny / 2.0, L * nz / 2.0, 0, 0, wall_hard_core_force, 0);
+	// 	// torque[ibody][1] += cross(L * nx / 2.0, L * ny / 2.0, L * nz / 2.0, 0, 0, wall_hard_core_force, 1);
+	// }
+	// if (h2 - 1 < -hard_core_threshold) {
+	// 	double d_approx = h2 - 1;
+	// 	double wall_hard_core_force = hard_core_scaling * kn * (abs(d_approx) - hard_core_threshold) * (abs(d_approx) - hard_core_threshold);
+	// 	f[ibody][2] += wall_hard_core_force;
+	// 	// torque[ibody][0] += cross(-L * nx / 2.0, -L * ny / 2.0, -L * nz / 2.0, 0, 0, wall_hard_core_force, 0);
+	// 	// torque[ibody][1] += cross(-L * nx / 2.0, -L * ny / 2.0, -L * nz / 2.0, 0, 0, wall_hard_core_force, 1);
+	// }
 
 	// compute surface damping force and momentum
 	double nu_1 = cn;
