@@ -76,7 +76,8 @@ FixNVEBodyAgent::FixNVEBodyAgent(LAMMPS *lmp, int narg, char **arg) :
   for (int i = 0; i < nlocal; i++) atom->image[i] = 0;
 
   // find maximum id across all processors
-  find_maxid();
+  maxtag_all = 1E6;
+  // find_maxid();
   // printf("maxid = %d\n", maxtag_all);
 }
 
