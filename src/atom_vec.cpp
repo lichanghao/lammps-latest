@@ -158,6 +158,10 @@ void AtomVec::init()
     error->all(FLERR, "KOKKOS package requires a kokkos enabled atom_style");
 }
 
+<<<<<<< HEAD
+=======
+// static constexpr bigint DELTA = 16384 * 16;
+>>>>>>> f803d4277d (recovered the increase of DELTA and DELTA_BONUS)
 static constexpr bigint DELTA = 16384;
 
 /* ----------------------------------------------------------------------
@@ -182,6 +186,10 @@ void AtomVec::grow_nmax()
   nmax += DELTA;
 }
 
+<<<<<<< HEAD
+=======
+// static constexpr bigint DELTA_BONUS = 8192 * 16;
+>>>>>>> f803d4277d (recovered the increase of DELTA and DELTA_BONUS)
 static constexpr bigint DELTA_BONUS = 8192;
 
 /* ----------------------------------------------------------------------

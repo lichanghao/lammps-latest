@@ -66,7 +66,7 @@ FixNVEBodyAgent::FixNVEBodyAgent(LAMMPS *lmp, int narg, char **arg) :
   // for (int i = 0; i < nlocal; i++) atom->image[i] = 0;
 
   // find maximum id across all processors
-  maxtag_all = 1E6;
+  maxtag_all = 1E5;
   find_maxid();
   // printf("maxid = %d\n", maxtag_all);
 }
@@ -511,7 +511,7 @@ double FixNVEBodyAgent::radius(double *data, int nvert)
 double FixNVEBodyAgent::length(double *data)
 {
   // this is only correct for rod-like bodies with 2 nodes, 0 edges and 0 faces
-  return sqrt(std::pow(data[3] - data[0], 2) + std::pow(data[4] - data[1], 2) + std::pow(data[5] - data[2], 2));
+  return std::sqrt(std::pow(data[3] - data[0], 2) + std::pow(data[4] - data[1], 2) + std::pow(data[5] - data[2], 2));
 }
 
 

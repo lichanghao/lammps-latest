@@ -89,7 +89,23 @@ void FixNVEBodyAgent::init()
       growth_rates_all[i] = random->gaussian() * growth_standard_dev + growth_rate;
   }
 
+<<<<<<< HEAD
   printf("Hello 1\n");
+=======
+  // initiate the image flag for all atoms as 0, because somehow the original body package did not do it
+  for (int i = 0; i < nlocal; i++) atom->image[i] = 0;
+
+  // find maximum id across all processors
+  maxtag_all = 1E6;
+  // find_maxid();
+  // printf("maxid = %d\n", maxtag_all);
+}
+
+/* ---------------------------------------------------------------------- */
+
+void FixNVEBodyAgent::init()
+{
+>>>>>>> f803d4277d (recovered the increase of DELTA and DELTA_BONUS)
   avec = dynamic_cast<AtomVecBody *>(atom->style_match("body"));
   if (!avec) error->all(FLERR,"Fix nve/body/agent requires atom style body");
 
