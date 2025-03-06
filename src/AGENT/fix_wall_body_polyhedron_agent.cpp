@@ -148,6 +148,7 @@ FixWallBodyPolyhedronAgent::FixWallBodyPolyhedronAgent(LAMMPS *lmp, int narg, ch
       printf("\n------------------ Fix_Wall_Body_Polyhedron_Agent Parameters ------------------\n");
       printf("E_surface = %f, eta_1 = %f, Sigma_0 = %f\n", kn, c_n, c_t);
       printf("hc_scaling = %f, hc_threshold = %f\n", hard_core_scaling, hard_core_threshold);
+      printf("Scaling parameter for the mutant type = %f\n", activity);
       printf("-------------------------------------------------------------------------------\n\n");
   }
 
