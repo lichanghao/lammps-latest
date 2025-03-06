@@ -63,7 +63,8 @@ FixNVEBodyAgent::FixNVEBodyAgent(LAMMPS *lmp, int narg, char **arg) :
   atom->add_callback(Atom::BORDER);
   
   // initiate the image flag for all atoms as 0, because somehow the original body package did not do it
-  // for (int i = 0; i < nlocal; i++) atom->image[i] = 0;
+  int nlocal = atom->nlocal;
+  for (int i = 0; i < nlocal; i++) atom->image[i] = 0;
 
   // find maximum id across all processors
   maxtag_all = 1E5;
