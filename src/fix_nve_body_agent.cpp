@@ -60,16 +60,15 @@ FixNVEBodyAgent::FixNVEBodyAgent(LAMMPS *lmp, int narg, char **arg) :
   random = new RanPark(lmp, seed + comm->me);
 
   atom->add_callback(Atom::GROW);
-  // atom->add_callback(Atom::BORDER);
-
+  atom->add_callback(Atom::BORDER);
   
   // initiate the image flag for all atoms as 0, because somehow the original body package did not do it
   // for (int i = 0; i < nlocal; i++) atom->image[i] = 0;
+
   // find maximum id across all processors
-  maxtag_all = 1E6;
+  maxtag_all = 1E5;
   find_maxid();
   // printf("maxid = %d\n", maxtag_all);
-  printf("Hello 0\n");
 }
 
 /* ---------------------------------------------------------------------- */
@@ -77,11 +76,9 @@ FixNVEBodyAgent::FixNVEBodyAgent(LAMMPS *lmp, int narg, char **arg) :
 void FixNVEBodyAgent::init()
 { 
   
-
   // initiate peratom vector for growth rates, Gaussian distribution ~ N(growth_rate, growth_standard_dev)
   nmax = atom->nmax;
   memory->create(growth_rates_all, nmax, "fix/nve/body/agent:growth_rates_all");
-  // grow_arrays(nmax);
   int *mask = atom->mask;
   int nlocal = atom->nlocal;
   for (int i = 0; i < nlocal; i++) {
@@ -89,30 +86,12 @@ void FixNVEBodyAgent::init()
       growth_rates_all[i] = random->gaussian() * growth_standard_dev + growth_rate;
   }
 
-<<<<<<< HEAD
-  printf("Hello 1\n");
-=======
-  // initiate the image flag for all atoms as 0, because somehow the original body package did not do it
-  for (int i = 0; i < nlocal; i++) atom->image[i] = 0;
-
-  // find maximum id across all processors
-  maxtag_all = 1E6;
-  // find_maxid();
-  // printf("maxid = %d\n", maxtag_all);
-}
-
-/* ---------------------------------------------------------------------- */
-
-void FixNVEBodyAgent::init()
-{
->>>>>>> f803d4277d (recovered the increase of DELTA and DELTA_BONUS)
   avec = dynamic_cast<AtomVecBody *>(atom->style_match("body"));
   if (!avec) error->all(FLERR,"Fix nve/body/agent requires atom style body");
 
-  printf("Hello 2\n");
   avec_hybrid = dynamic_cast<AtomVec *>(atom->style_match("hybrid"));
   if (!avec) avec_hybrid = avec;
-  printf("Hello 3\n");
+
   force_reneighbor = 1;
   next_reneighbor = update->ntimestep + 1;
 
@@ -532,7 +511,7 @@ double FixNVEBodyAgent::radius(double *data, int nvert)
 double FixNVEBodyAgent::length(double *data)
 {
   // this is only correct for rod-like bodies with 2 nodes, 0 edges and 0 faces
-  return sqrt(std::pow(data[3] - data[0], 2) + std::pow(data[4] - data[1], 2) + std::pow(data[5] - data[2], 2));
+  return std::sqrt(std::pow(data[3] - data[0], 2) + std::pow(data[4] - data[1], 2) + std::pow(data[5] - data[2], 2));
 }
 
 
