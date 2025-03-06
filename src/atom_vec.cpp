@@ -158,7 +158,7 @@ void AtomVec::init()
     error->all(FLERR, "KOKKOS package requires a kokkos enabled atom_style");
 }
 
-static constexpr bigint DELTA = 8192 * 16;
+static constexpr bigint DELTA = 16384;
 
 /* ----------------------------------------------------------------------
    roundup N so it is a multiple of DELTA
@@ -182,7 +182,7 @@ void AtomVec::grow_nmax()
   nmax += DELTA;
 }
 
-static constexpr bigint DELTA_BONUS = 8192 * 16;
+static constexpr bigint DELTA_BONUS = 8192;
 
 /* ----------------------------------------------------------------------
    grow nmax_bonus so it is a multiple of DELTA_BONUS

@@ -18,7 +18,6 @@
    Last updated: 02/26/2025
 ------------------------------------------------------------------------- */
 
-#include <cmath>
 #include "fix_nve_body_agent.h"
 #include "math_extra.h"
 #include "atom.h"
@@ -60,36 +59,44 @@ FixNVEBodyAgent::FixNVEBodyAgent(LAMMPS *lmp, int narg, char **arg) :
   int seed = static_cast<int> (time(NULL));
   random = new RanPark(lmp, seed + comm->me);
 
+  atom->add_callback(Atom::GROW);
+  // atom->add_callback(Atom::BORDER);
+
+  
+  // initiate the image flag for all atoms as 0, because somehow the original body package did not do it
+  // for (int i = 0; i < nlocal; i++) atom->image[i] = 0;
+  // find maximum id across all processors
+  maxtag_all = 1E6;
+  find_maxid();
+  // printf("maxid = %d\n", maxtag_all);
+  printf("Hello 0\n");
+}
+
+/* ---------------------------------------------------------------------- */
+
+void FixNVEBodyAgent::init()
+{ 
+  
+
   // initiate peratom vector for growth rates, Gaussian distribution ~ N(growth_rate, growth_standard_dev)
   nmax = atom->nmax;
-  grow_arrays(nmax);
+  memory->create(growth_rates_all, nmax, "fix/nve/body/agent:growth_rates_all");
+  // grow_arrays(nmax);
   int *mask = atom->mask;
   int nlocal = atom->nlocal;
   for (int i = 0; i < nlocal; i++) {
     // if (mask[i] & groupbit)
       growth_rates_all[i] = random->gaussian() * growth_standard_dev + growth_rate;
   }
-  atom->add_callback(Atom::GROW);
-  atom->add_callback(Atom::BORDER);
 
-  // initiate the image flag for all atoms as 0, because somehow the original body package did not do it
-  for (int i = 0; i < nlocal; i++) atom->image[i] = 0;
-
-  // find maximum id across all processors
-  find_maxid();
-  // printf("maxid = %d\n", maxtag_all);
-}
-
-/* ---------------------------------------------------------------------- */
-
-void FixNVEBodyAgent::init()
-{
+  printf("Hello 1\n");
   avec = dynamic_cast<AtomVecBody *>(atom->style_match("body"));
   if (!avec) error->all(FLERR,"Fix nve/body/agent requires atom style body");
 
+  printf("Hello 2\n");
   avec_hybrid = dynamic_cast<AtomVec *>(atom->style_match("hybrid"));
   if (!avec) avec_hybrid = avec;
-
+  printf("Hello 3\n");
   force_reneighbor = 1;
   next_reneighbor = update->ntimestep + 1;
 
@@ -97,8 +104,6 @@ void FixNVEBodyAgent::init()
   // no point particles allowed
 
   int *body = atom->body;
-  int *mask = atom->mask;
-  int nlocal = atom->nlocal;
 
   for (int i = 0; i < nlocal; i++)
     if (mask[i] & groupbit)
@@ -113,7 +118,7 @@ FixNVEBodyAgent::~FixNVEBodyAgent()
 {
   delete random;
   atom->delete_callback(id, Atom::GROW);
-  atom->delete_callback(id, Atom::BORDER);
+  // atom->delete_callback(id, Atom::BORDER);
   memory->destroy(growth_rates_all);
 }
 
