@@ -374,7 +374,7 @@ my6Vec compute_surface_damping_force(Cell* cell_1, double* v, double* omega, dou
 double contact_area_density(Cell* cell_1, double rr);
 
 // kernel function in fix_wall_body_polyhedron_agent.cpp
-void contact_forces_new(int ibody, Cell* cell, double* v, double* omega, double** f, double** torque, double kn, double cn, double ct, int shift_flag, double hard_core_scaling, double hard_core_threshold);
+void contact_forces_new(int ibody, Cell* cell, double* v, double* omega, double** f, double** torque, double kn, double cn, double ct, int shift_flag, double hard_core_scaling, double hard_core_threshold, double radius);
 
 // keep verticalized cells on the surface
 void keep_verticalized_cell(int ibody, Cell *cell, double **f, double **torque);

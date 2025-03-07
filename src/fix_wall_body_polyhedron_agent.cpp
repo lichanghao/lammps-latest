@@ -380,6 +380,7 @@ void FixWallBodyPolyhedronAgent::post_force(int /*vflag*/)
 
       num_contacts = 0;
       facc[0] = facc[1] = facc[2] = 0;
+      // printf("i = %d, coord = %f %f %f, radius = %f \n", i, x[i][0], x[i][1], x[i][2], radius[i]);
       edge_against_wall(i, wall_pos, side, vwall, x, f, torque,
                         contact_list, num_contacts, facc);
 
@@ -536,7 +537,7 @@ int FixWallBodyPolyhedronAgent::sphere_against_wall(int i, double wall_pos,
     fx = delx*fpair/d;
     fy = dely*fpair/d;
     fz = delz*fpair/d;
-
+    
     contact_forces(i, 1.0, x[i], hi, delx, dely, delz,
                    fx, fy, fz, x, v, angmom, f, torque, vwall);
     mode = VERTEX;
@@ -573,8 +574,10 @@ int FixWallBodyPolyhedronAgent::edge_against_wall(int i, double wall_pos,
 
   // loop through body i's edges
 
-  for (ni = 0; ni < nei; ni++)
+  for (ni = 0; ni < nei; ni++) {
+    // printf("edge %d, coord = %f %f %f\n", i, x[i][0], x[i][1], x[i][2]);
     compute_distance_to_wall(i, ni, x[i], rradi, wall_pos, side, vwall, contact);
+  }
 
   return contact;
 }
@@ -626,6 +629,7 @@ int FixWallBodyPolyhedronAgent::compute_distance_to_wall(int ibody, int edge_ind
   xpi2[0] = xmi[0] + discrete[ifirst+npi2][0];
   xpi2[1] = xmi[1] + discrete[ifirst+npi2][1];
   xpi2[2] = xmi[2] + discrete[ifirst+npi2][2];
+  // printf("edge %d, coord = %f %f %f, %f %f %f\n", edge_index, xpi1[0], xpi1[1], xpi1[2], xpi2[0], xpi2[1], xpi2[2]);
 
   // determine the intersection of the edge to the wall
 
@@ -691,7 +695,7 @@ int FixWallBodyPolyhedronAgent::compute_distance_to_wall(int ibody, int edge_ind
         nu = c_n * activity;
         A = c_t * activity;
       }
-      contact_forces_new(ibody, &cell, v[ibody], omega, f, torque, kn, nu, A, 0, hard_core_scaling, hard_core_threshold);
+      contact_forces_new(ibody, &cell, v[ibody], omega, f, torque, kn, nu, A, 0, hard_core_scaling, hard_core_threshold, rounded_radius_i);
       force_flag = 1;
     }
 
@@ -734,7 +738,7 @@ int FixWallBodyPolyhedronAgent::compute_distance_to_wall(int ibody, int edge_ind
       double nu = 0;
       if (type[ibody] == 1) nu = c_n;
       else if (type[ibody] == 2) nu = c_n * activity;
-      contact_forces_new(ibody, &cell, v[ibody], omega, f, torque, kn, nu, c_t, 0, hard_core_scaling, hard_core_threshold);
+      contact_forces_new(ibody, &cell, v[ibody], omega, f, torque, kn, nu, c_t, 0, hard_core_scaling, hard_core_threshold, rounded_radius_i);
       force_flag = 1;
     }
 

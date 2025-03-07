@@ -33,8 +33,8 @@ using namespace FixConst;
 
 #define INITIAL_MASS (1e-3*mass_scaling)
 #define INITIAL_INERTIA_x (5e-4*mass_scaling)
-#define INITIAL_INERTIA_y (1.2708e-4*mass_scaling)
-#define INITIAL_INERTIA_z (1.2708e-4*mass_scaling)
+#define INITIAL_INERTIA_y (1.270833e-4*mass_scaling)
+#define INITIAL_INERTIA_z (1.270833e-4*mass_scaling)
 #define MAX_TAG 9E8
 #define FORCE_RENEIGHBOR_INTERVAL 1
 
@@ -354,7 +354,13 @@ void FixNVEBodyAgent::proliferate_single_body(int ibody, bool &is_dividing)
     set_force(ibody, 0, 0, 0, 0, 0, 0);
     set_force(new_body_index, 0, 0, 0, 0, 0, 0);
 
-    // reset the mass and rotational inertia
+    // scale the angular momentum 
+    for (int j = 0; j < 3; j++) {
+      angmom[ibody][j] *= 0.5;
+      angmom[new_body_index][j] *= 0.5;
+    }
+
+    // reset the mass, rotational inertia, particle geometry
     rmass[new_body_index] = INITIAL_MASS;
     rmass[ibody] = INITIAL_MASS;
     bonus[body[ibody]].inertia[0] = INITIAL_INERTIA_x;
@@ -363,6 +369,15 @@ void FixNVEBodyAgent::proliferate_single_body(int ibody, bool &is_dividing)
     bonus[body[new_body_index]].inertia[0] = INITIAL_INERTIA_x;
     bonus[body[new_body_index]].inertia[1] = INITIAL_INERTIA_y;
     bonus[body[new_body_index]].inertia[2] = INITIAL_INERTIA_z;
+    double initial_enclosing_radius = (L_max + 2*r) / 4.0;
+    bonus[body[ibody]].dvalue[6+2] = initial_enclosing_radius;
+    bonus[body[new_body_index]].dvalue[6+2] = initial_enclosing_radius;
+    double initial_atom_radius = (L_max + 2*r) / 4.0;
+    atom->radius[ibody] = initial_atom_radius;
+    atom->radius[new_body_index] = initial_atom_radius;
+    #ifdef FIX_NVE_BODY_AGENT_DEBUG
+    // printf("rounded radius of the mother cell: %f, rounded radius of the daughter cell: %f\n", bonus[body[ibody]].dvalue[6+2], bonus[body[new_body_index]].dvalue[6+2]);
+    #endif
 
     // reallocate the per-atom vector if nmax is changed
     if (nmax < atom->nmax) {
@@ -401,6 +416,7 @@ void FixNVEBodyAgent::grow_single_body(int ibody, double growth_rate)
     bonus[body[ibody]].dvalue[j] *= length_ratio; // coords of vertices (in body frame)
   }
   bonus[body[ibody]].dvalue[6+2] *= length_ratio; // enclosing radius (not rounded radius)
+  atom->radius[ibody] = r + L * length_ratio;           
 
   // mass and rotational inertia are currently neglected, because the model is running under overdamped settings
   rmass[ibody] *= growth_ratio;                   // mass ~ V

@@ -45,10 +45,9 @@ Cell::Cell(double mx, double my, double mz, double mnx, double mny, double mnz, 
 
 vector<Cell *> cells;
 
-my6Vec cell_surface_gforce(Cell *cell_1, double kn, double A)
+my6Vec cell_surface_gforce(Cell *cell_1, double kn, double A, double R)
 {
 	// Return the surface torque acting on cell 1
-
 	double t;
 
 	double E_1 = kn;
@@ -374,10 +373,10 @@ double contact_area_density(Cell *cell_1, double rr)
    needed to be translated to moment in space fixed frame
 ------------------------------------------------------------------------- */
 
-void contact_forces_new(int ibody, Cell *cell, double *v, double *omega, double **f, double **torque, double kn, double cn, double ct, int shift_flag, double hard_core_scaling, double hard_core_threshold)
+void contact_forces_new(int ibody, Cell *cell, double *v, double *omega, double **f, double **torque, double kn, double cn, double ct, int shift_flag, double hard_core_scaling, double hard_core_threshold, double radius)
 {
 	double A = ct;
-	my6Vec force_and_torque = cell_surface_gforce(cell, kn, A);
+	my6Vec force_and_torque = cell_surface_gforce(cell, kn, A, radius);
 	double cell_force[3] = {force_and_torque.x, force_and_torque.y, force_and_torque.z};
 
 	shift_vector(cell_force, 3, -shift_flag);
@@ -399,30 +398,23 @@ void contact_forces_new(int ibody, Cell *cell, double *v, double *omega, double 
 	torque[ibody][1] += cell_torque[1];
 	torque[ibody][2] += cell_torque[2];
 
-	// approximation to the hard core potential
+	// approximation to the hard core potential (Need to be calibrated)
 	double z = cell->get_z();
 	double h1 = z + L * nz / 2.0;
 	double h2 = z - L * nz / 2.0;
 	double d_approx = min(h1, h2) - 1;
 	if (d_approx < -hard_core_threshold) {
-		double augmented_force = hard_core_scaling * kn * (abs(d_approx) - hard_core_threshold) * (abs(d_approx) - hard_core_threshold);
-		f[ibody][2] += augmented_force;
-		// printf("Warning: augmented surface z-force, h1: %f, h2: %f, d_approx: %f, augmented force: %f\n", h1, h2, d_approx, augmented_force);
+		f[ibody][2] += hard_core_scaling * kn * (abs(d_approx) - hard_core_threshold) * (abs(d_approx) - hard_core_threshold);
+		my6Vec force_and_torque_hard = cell_surface_gforce(cell, kn, A, radius - hard_core_threshold);
+		// f[ibody][0] += hard_core_scaling * force_and_torque_hard.x;
+		// f[ibody][1] += hard_core_scaling * force_and_torque_hard.y;
+		// f[ibody][2] += hard_core_scaling * force_and_torque_hard.z;
+		double cell_torque_hard[3] = {cross(nx, ny, nz, 0, 0, force_and_torque_hard.nz, 0) * cos_phi, cross(nx, ny, nz, 0, 0, force_and_torque_hard.nz, 1) * cos_phi, 0};
+		// torque[ibody][0] += hard_core_scaling * cell_torque_hard[0];
+		// torque[ibody][1] += hard_core_scaling * cell_torque_hard[1];
+		// torque[ibody][2] += hard_core_scaling * cell_torque_hard[2];
+		// printf("Warning: augmented surface z-force, h1: %f, h2: %f, d_approx: %f, augmented force: %f, torque: %f %f\n", h1, h2, d_approx, hard_core_scaling * force_and_torque_hard.z, hard_core_scaling * cell_torque_hard[0], hard_core_scaling * cell_torque_hard[1]);
 	}
-	// if (h1 - 1 < -hard_core_threshold) {
-	// 	double d_approx = h1 - 1;
-	// 	double wall_hard_core_force = hard_core_scaling * kn * (abs(d_approx) - hard_core_threshold) * (abs(d_approx) - hard_core_threshold);
-	// 	f[ibody][2] += wall_hard_core_force;
-	// 	// torque[ibody][0] += cross(L * nx / 2.0, L * ny / 2.0, L * nz / 2.0, 0, 0, wall_hard_core_force, 0);
-	// 	// torque[ibody][1] += cross(L * nx / 2.0, L * ny / 2.0, L * nz / 2.0, 0, 0, wall_hard_core_force, 1);
-	// }
-	// if (h2 - 1 < -hard_core_threshold) {
-	// 	double d_approx = h2 - 1;
-	// 	double wall_hard_core_force = hard_core_scaling * kn * (abs(d_approx) - hard_core_threshold) * (abs(d_approx) - hard_core_threshold);
-	// 	f[ibody][2] += wall_hard_core_force;
-	// 	// torque[ibody][0] += cross(-L * nx / 2.0, -L * ny / 2.0, -L * nz / 2.0, 0, 0, wall_hard_core_force, 0);
-	// 	// torque[ibody][1] += cross(-L * nx / 2.0, -L * ny / 2.0, -L * nz / 2.0, 0, 0, wall_hard_core_force, 1);
-	// }
 
 	// compute surface damping force and momentum
 	double nu_1 = cn;
