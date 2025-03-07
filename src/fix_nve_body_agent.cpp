@@ -114,7 +114,7 @@ FixNVEBodyAgent::~FixNVEBodyAgent()
 {
   delete random;
   atom->delete_callback(id, Atom::GROW);
-  // atom->delete_callback(id, Atom::BORDER);
+  atom->delete_callback(id, Atom::BORDER);
   memory->destroy(growth_rates_all);
 }
 
@@ -462,9 +462,12 @@ void FixNVEBodyAgent::apply_damping_force(int ibody, double *omega, double **f, 
   f[ibody][2] += -temp_nu_0 * (L+4.0/3.0*R) * v[2];
 
   // adding damping moment
-  torque[ibody][0] += -1.0 / 6.0 * temp_nu_0 * omega[0] * std::pow(L+4.0/3.0*R, 3);
-  torque[ibody][1] += -1.0 / 6.0 * temp_nu_0 * omega[1] * std::pow(L+4.0/3.0*R, 3);
-  torque[ibody][2] += -1.0 / 6.0 * temp_nu_0 * omega[2] * std::pow(L+4.0/3.0*R, 3);
+  // torque[ibody][0] += -1.0 / 6.0 * temp_nu_0 * omega[0] * std::pow(L+4.0/3.0*R, 3);
+  // torque[ibody][1] += -1.0 / 6.0 * temp_nu_0 * omega[1] * std::pow(L+4.0/3.0*R, 3);
+  // torque[ibody][2] += -1.0 / 6.0 * temp_nu_0 * omega[2] * std::pow(L+4.0/3.0*R, 3);
+  torque[ibody][0] += -1.0 / 12.0 * temp_nu_0 * omega[0] * std::pow(L, 3);
+  torque[ibody][1] += -1.0 / 12.0 * temp_nu_0 * omega[1] * std::pow(L, 3);
+  torque[ibody][2] += -1.0 / 12.0 * temp_nu_0 * omega[2] * std::pow(L, 3);
   
   // debug code
   #ifdef FIX_NVE_BODY_AGENT_DEBUG

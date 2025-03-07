@@ -405,8 +405,9 @@ void contact_forces_new(int ibody, Cell *cell, double *v, double *omega, double 
 	double h2 = z - L * nz / 2.0;
 	double d_approx = min(h1, h2) - 1;
 	if (d_approx < -hard_core_threshold) {
-		f[ibody][2] += hard_core_scaling * kn * (abs(d_approx) - hard_core_threshold) * (abs(d_approx) - hard_core_threshold);
-		// printf("Warning: augmented surface z-force, h1: %f, h2: %f, d_approx: %f\n", h1, h2, d_approx);
+		double augmented_force = hard_core_scaling * kn * (abs(d_approx) - hard_core_threshold) * (abs(d_approx) - hard_core_threshold);
+		f[ibody][2] += augmented_force;
+		// printf("Warning: augmented surface z-force, h1: %f, h2: %f, d_approx: %f, augmented force: %f\n", h1, h2, d_approx, augmented_force);
 	}
 	// if (h1 - 1 < -hard_core_threshold) {
 	// 	double d_approx = h1 - 1;

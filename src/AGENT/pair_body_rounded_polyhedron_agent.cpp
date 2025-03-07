@@ -57,6 +57,7 @@ using namespace MathConst;
 
 //#define _POLYHEDRON_DEBUG
 #define MY_UTIL
+#define PARTICLE_CONTACT_DEBUG
 
 enum {EE_INVALID=0,EE_NONE,EE_INTERACT};
 enum {EF_INVALID=0,EF_NONE,EF_PARALLEL,EF_SAME_SIDE_OF_FACE,
@@ -794,6 +795,12 @@ void PairBodyRoundedPolyhedronAgent::sphere_against_edge(int ibody, int jbody,
     fx = delx*fpair/rij;
     fy = dely*fpair/rij;
     fz = delz*fpair/rij;
+
+    #ifdef PARTICLE_CONTACT_DEBUG
+    if (fpair > 1e4) {
+      
+    }
+    #endif
 
     if (R <= 0) { // in contact
 
