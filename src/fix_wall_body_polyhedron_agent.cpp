@@ -18,7 +18,7 @@
 
 /* ----------------------------------------------------------------------
    Modified by Changhao Li (czl478@psu.edu, changhaoli1997@gmail.com) for
-   modeling of bacteria film. Last modified date: 06/30/2020
+   modeling of bacteria film. Last modified date: 02/26/2025
 ------------------------------------------------------------------------- */
 
 #include "fix_wall_body_polyhedron_agent.h"

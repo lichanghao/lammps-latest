@@ -18,6 +18,7 @@
    Last updated: 02/26/2025
 ------------------------------------------------------------------------- */
 
+#include <cmath>
 #include "fix_nve_body_agent.h"
 #include "math_extra.h"
 #include "atom.h"
@@ -33,8 +34,8 @@ using namespace FixConst;
 
 #define INITIAL_MASS (1e-3*mass_scaling)
 #define INITIAL_INERTIA_x (5e-4*mass_scaling)
-#define INITIAL_INERTIA_y (1.270833e-4*mass_scaling)
-#define INITIAL_INERTIA_z (1.270833e-4*mass_scaling)
+#define INITIAL_INERTIA_y (5e-4*mass_scaling)
+#define INITIAL_INERTIA_z (5e-4*mass_scaling)
 #define MAX_TAG 9E8
 #define FORCE_RENEIGHBOR_INTERVAL 1
 
@@ -59,11 +60,22 @@ FixNVEBodyAgent::FixNVEBodyAgent(LAMMPS *lmp, int narg, char **arg) :
   int seed = static_cast<int> (time(NULL));
   random = new RanPark(lmp, seed + comm->me);
 
+  // initiate peratom vector for growth rates, Gaussian distribution ~ N(growth_rate, growth_standard_dev)
+  int nlocal = atom->nlocal;
+  nmax = atom->nmax;
+  int *mask = atom->mask;
+  memory->create(growth_rates_all, nmax, "fix/nve/body/agent:growth_rates_all");
+  memory->create(birth_time_all, nmax, "fix/nve/body/agent:birth_time_all");
+  for (int i = 0; i < nlocal; i++) {
+    // if (mask[i] & groupbit)
+      growth_rates_all[i] = random->gaussian() * growth_standard_dev + growth_rate;
+      birth_time_all[i] = 0;
+  }
+
   atom->add_callback(Atom::GROW);
   atom->add_callback(Atom::BORDER);
   
   // initiate the image flag for all atoms as 0, because somehow the original body package did not do it
-  int nlocal = atom->nlocal;
   for (int i = 0; i < nlocal; i++) atom->image[i] = 0;
 
   // find maximum id across all processors
@@ -76,17 +88,8 @@ FixNVEBodyAgent::FixNVEBodyAgent(LAMMPS *lmp, int narg, char **arg) :
 
 void FixNVEBodyAgent::init()
 { 
-  
-  // initiate peratom vector for growth rates, Gaussian distribution ~ N(growth_rate, growth_standard_dev)
-  nmax = atom->nmax;
-  memory->create(growth_rates_all, nmax, "fix/nve/body/agent:growth_rates_all");
   int *mask = atom->mask;
   int nlocal = atom->nlocal;
-  for (int i = 0; i < nlocal; i++) {
-    // if (mask[i] & groupbit)
-      growth_rates_all[i] = random->gaussian() * growth_standard_dev + growth_rate;
-  }
-
   avec = dynamic_cast<AtomVecBody *>(atom->style_match("body"));
   if (!avec) error->all(FLERR,"Fix nve/body/agent requires atom style body");
 
@@ -105,6 +108,11 @@ void FixNVEBodyAgent::init()
     if (mask[i] & groupbit)
       if (body[i] < 0) error->one(FLERR,"Fix nve/body/agent requires bodies");
 
+  const char *filename = "center.dump";
+  if (comm->me == 0) {
+    fp = fopen(filename, "w");
+  }
+
   FixNVE::init();
 }
 
@@ -113,9 +121,12 @@ void FixNVEBodyAgent::init()
 FixNVEBodyAgent::~FixNVEBodyAgent()
 {
   delete random;
+  if (comm->me == 0)
+      fclose(fp);
   atom->delete_callback(id, Atom::GROW);
   atom->delete_callback(id, Atom::BORDER);
   memory->destroy(growth_rates_all);
+  memory->destroy(birth_time_all);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -151,6 +162,11 @@ void FixNVEBodyAgent::initial_integrate(int /*vflag*/)
   int nlocal = atom->nlocal;
   int *type = atom->type;
   if (igroup == atom->firstgroup) nlocal = atom->nfirst;
+
+  // output customized file (only for single processor test)
+  if (update->ntimestep % out_interval == 1) {
+    write_frame();
+  }
 
   // set timestep here since dt may have changed or come via rRESPA
 
@@ -385,6 +401,7 @@ void FixNVEBodyAgent::proliferate_single_body(int ibody, bool &is_dividing)
       grow_arrays(nmax);
     }
     growth_rates_all[new_body_index] = random->gaussian() * growth_standard_dev + growth_rate;
+    birth_time_all[new_body_index] = update->ntimestep * dtf * 2;
   }
 }
 
@@ -478,12 +495,9 @@ void FixNVEBodyAgent::apply_damping_force(int ibody, double *omega, double **f, 
   f[ibody][2] += -temp_nu_0 * (L+4.0/3.0*R) * v[2];
 
   // adding damping moment
-  // torque[ibody][0] += -1.0 / 6.0 * temp_nu_0 * omega[0] * std::pow(L+4.0/3.0*R, 3);
-  // torque[ibody][1] += -1.0 / 6.0 * temp_nu_0 * omega[1] * std::pow(L+4.0/3.0*R, 3);
-  // torque[ibody][2] += -1.0 / 6.0 * temp_nu_0 * omega[2] * std::pow(L+4.0/3.0*R, 3);
-  torque[ibody][0] += -1.0 / 12.0 * temp_nu_0 * omega[0] * std::pow(L, 3);
-  torque[ibody][1] += -1.0 / 12.0 * temp_nu_0 * omega[1] * std::pow(L, 3);
-  torque[ibody][2] += -1.0 / 12.0 * temp_nu_0 * omega[2] * std::pow(L, 3);
+  torque[ibody][0] += -1.0 / 12.0 * temp_nu_0 * omega[0] * std::pow(L+4.0/3.0*R, 3);
+  torque[ibody][1] += -1.0 / 12.0 * temp_nu_0 * omega[1] * std::pow(L+4.0/3.0*R, 3);
+  torque[ibody][2] += -1.0 / 12.0 * temp_nu_0 * omega[2] * std::pow(L+4.0/3.0*R, 3);
   
   // debug code
   #ifdef FIX_NVE_BODY_AGENT_DEBUG
@@ -504,9 +518,9 @@ void FixNVEBodyAgent::apply_damping_force(int ibody, double *omega, double **f, 
 
 void FixNVEBodyAgent::add_noise(double *f, double *mom, double given_noise_level)
 {
-  f[0] += 1 * given_noise_level * (random->uniform() - 0.5);
-  f[1] += 1 * given_noise_level * (random->uniform() - 0.5);
-  f[2] += 1 * given_noise_level * (random->uniform() - 0.5);
+  f[0] += given_noise_level * (random->uniform() - 0.5);
+  f[1] += given_noise_level * (random->uniform() - 0.5);
+  f[2] += given_noise_level * (random->uniform() - 0.5);
   mom[0] += given_noise_level * (random->uniform() - 0.5);
   mom[1] += given_noise_level * (random->uniform() - 0.5);
   mom[2] += given_noise_level * (random->uniform() - 0.5);
@@ -598,6 +612,7 @@ void FixNVEBodyAgent::copy_atom(int ibody, int jbody)
 void FixNVEBodyAgent::grow_arrays(int n)
 {
   memory->grow(growth_rates_all, n, "fix/nve/body/agent:growth_rates_all");
+  memory->grow(birth_time_all, n, "fix/nve/body/agent:birth_time_all");
   vector_atom = growth_rates_all;
 }
 
@@ -747,6 +762,10 @@ void FixNVEBodyAgent::read_params(int narg, char **arg)
     {
       mass_scaling = utils::numeric(FLERR, arg[i + 1], false, lmp);
     }
+    if (strcmp(arg[i], "out_interval") == 0)
+    {
+      out_interval = utils::numeric(FLERR, arg[i + 1], false, lmp);
+    }
   }
 
   if (comm->me == 0) {
@@ -812,3 +831,27 @@ void FixNVEBodyAgent::find_maxid()
 //   for (int i = 0; i < nlocal; i++) max = MAX(max,tag[i]);
 //   MPI_Allreduce(&max,&maxtag_all,1,MPI_LMP_TAGINT,MPI_MAX,world);
 // }
+
+void FixNVEBodyAgent::write_frame()
+{
+  if (comm->me == 0) {
+    fprintf(fp, "time: %f\n", (update->ntimestep - 1) * dtf * 2);
+    int nlocal = atom->nlocal;
+    double **x = atom->x;
+    int *body = atom->body;
+    AtomVecBody::Bonus *bonus = avec->bonus;
+    for (int i = 0; i < nlocal; i++) {
+      if (atom->mask[i] & groupbit) {
+        double L = length(bonus[body[i]].dvalue);
+        double temp[6];
+        for (int j = 0; j < 6; j++)
+          temp[j] = bonus[body[i]].dvalue[j];
+        double cc[6];
+        body2space(temp, bonus[body[i]].quat, cc);
+        double *c1 = cc;
+        double *c2 = cc + 3;
+        fprintf(fp, "%f %f %f %f %f %f %f %f %f %d\n", 0.8*x[i][0], 0.8*x[i][1], 0.8*x[i][2], -c1[0]/L*2, -c1[1]/L*2, -c1[2]/L*2, 0.8*L, growth_rates_all[i], birth_time_all[i], atom->type[i]);
+      }
+    }
+  }
+}

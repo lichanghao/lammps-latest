@@ -747,6 +747,14 @@ void PairBodyRoundedPolyhedronAgent::sphere_against_edge(int ibody, int jbody,
     xi2[1] = x[ibody][1] + discrete[ifirst+npi2][1];
     xi2[2] = x[ibody][2] + discrete[ifirst+npi2][2];
 
+    double ncell[3] = {xi1[0] - xi2[0], xi1[1] - xi2[1], xi1[2] - xi2[2]};
+    double ncell_norm = std::sqrt(ncell[0]*ncell[0] + ncell[1]*ncell[1] + ncell[2]*ncell[2]);
+    double direction = v[ibody][0]*ncell[0] + v[ibody][1]*ncell[1] + v[ibody][2]*ncell[2];
+    for (int i = 0; i < 3; i++) {
+      ncell[i] /= ncell_norm;
+      if (direction < 0) ncell[i] = -ncell[i];
+    }
+
     // find the projection of the jbody's COM on the edge
     // modified by Changhao: fixed the bug if the COM of the sphere is on the extension line of the edge
     // Note: it worked for a cylinder interacting with a sphere, but probably not correct for a polyhedron
@@ -798,7 +806,7 @@ void PairBodyRoundedPolyhedronAgent::sphere_against_edge(int ibody, int jbody,
 
     #ifdef PARTICLE_CONTACT_DEBUG
     if (fpair > 1e4) {
-      
+
     }
     #endif
 
@@ -839,17 +847,22 @@ void PairBodyRoundedPolyhedronAgent::sphere_against_edge(int ibody, int jbody,
       }
 
       // normal friction term at contact
-
       fn[0] = -c_n * vn1 * std::sqrt(std::abs(R)) * friction;
       fn[1] = -c_n * vn2 * std::sqrt(std::abs(R)) * friction;
       fn[2] = -c_n * vn3 * std::sqrt(std::abs(R)) * friction;
 
       // tangential friction term at contact,
       // excluding the tangential deformation term
-
+      
+      // vt1 = vr1 * ncell[0];
+      // vt2 = vr2 * ncell[1];
+      // vt3 = vr3 * ncell[2];
       ft[0] = -c_t * vt1 * std::sqrt(std::abs(R)) * friction;
       ft[1] = -c_t * vt2 * std::sqrt(std::abs(R)) * friction;
       ft[2] = -c_t * vt3 * std::sqrt(std::abs(R)) * friction;
+      // printf("v = %f, %f, %f\n", v[ibody][0], v[ibody][1], v[ibody][2]);
+      // printf("vt = %f, %f, %f\n", vt1, vt2, vt3);
+      // printf("ft = %f, %f, %f\n", ft[0], ft[1], ft[2]);
 
       fx += fn[0] + ft[0];
       fy += fn[1] + ft[1];

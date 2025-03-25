@@ -36,6 +36,7 @@ class FixNVEBodyAgent : public FixNVE {
 
  private:
   double dtq;                    // timestep length
+  int out_interval;              // output timestep interval
   int nmax;                      // recorded maximum number of atoms
   int maxtag_all;                // current maximum tag number across all processors
   double growth_rate;            // expectation of growth rate, unit is 1/[T]
@@ -51,10 +52,13 @@ class FixNVEBodyAgent : public FixNVE {
   double mass_scaling;
 
   double *growth_rates_all;      // peratom vector for growth rates
+  double *birth_time_all;
 
   class AtomVecBody *avec;       // pointer to AtomVecBody class
   class AtomVec *avec_hybrid;    // pointer to AtomVecHybrid class if hybrid style is used, otherwise same as avec
   class RanPark *random;         // random generator
+
+  FILE *fp;                      // file pointer for output
 
   void grow_single_body(int, double);                                         // grow a single cell in a given timestep
   void proliferate_single_body(int, bool&);                                    // check length and proliferate a cell             
@@ -80,6 +84,8 @@ class FixNVEBodyAgent : public FixNVE {
   void read_params(int, char **);                                             // read parameters from input script
   void find_maxid();                                                          // find current max atom ID across all processors
   void find_nadded_atoms();                                                   // find how many added atoms in this timestep, across all processors
+
+  void write_frame();                                                         // write current frame to dump file
 };
 
 }    // namespace LAMMPS_NS

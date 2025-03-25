@@ -328,7 +328,7 @@ my6Vec compute_surface_damping_force(Cell *cell_1, double *v, double *omega, dou
 		double extra_x = -L * nu_1 / R * M_PI * R * sin2_theta * (v[0] + cross(omega[0], omega[1], omega[2], rr_0 * nx, rr_0 * ny, rr_0 * nz, 0));
 		double extra_y = -L * nu_1 / R * M_PI * R * sin2_theta * (v[1] + cross(omega[0], omega[1], omega[2], rr_0 * nx, rr_0 * ny, rr_0 * nz, 1));
 		double extra_z = -L * nu_1 / R * M_PI * R * sin2_theta * (v[2] + cross(omega[0], omega[1], omega[2], rr_0 * nx, rr_0 * ny, rr_0 * nz, 2));
-
+		
 		damping.x = gaussian_quadrature(fx, weights, 5) + extra_x;
 		damping.y = gaussian_quadrature(fy, weights, 5) + extra_y;
 		damping.z = 0;
@@ -398,7 +398,7 @@ void contact_forces_new(int ibody, Cell *cell, double *v, double *omega, double 
 	torque[ibody][1] += cell_torque[1];
 	torque[ibody][2] += cell_torque[2];
 
-	// approximation to the hard core potential (Need to be calibrated)
+	// approximation to the hard core potential
 	double z = cell->get_z();
     double h1 = z + L * nz / 2.0;
     double h2 = z - L * nz / 2.0;
@@ -407,9 +407,9 @@ void contact_forces_new(int ibody, Cell *cell, double *v, double *omega, double 
         f[ibody][2] += hard_core_scaling * kn * (abs(d_approx) - hard_core_threshold) * (abs(d_approx) - hard_core_threshold);
         my6Vec force_and_torque_hard = cell_surface_gforce(cell, kn, A, radius - hard_core_threshold);
         double cell_torque_hard[3] = {cross(nx, ny, nz, 0, 0, force_and_torque_hard.nz, 0) * cos_phi, cross(nx, ny, nz, 0, 0, force_and_torque_hard.nz, 1) * cos_phi, 0};
-        torque[ibody][0] += cell_torque_hard[0];
-        torque[ibody][1] += cell_torque_hard[1];
-        torque[ibody][2] += cell_torque_hard[2];
+        // torque[ibody][0] += cell_torque_hard[0];
+        // torque[ibody][1] += cell_torque_hard[1];
+        // torque[ibody][2] += cell_torque_hard[2];
     }
 
 	// compute surface damping force and momentum
