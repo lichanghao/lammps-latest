@@ -488,6 +488,9 @@ void FixNVEBodyAgent::apply_damping_force(int ibody, double *omega, double **f, 
   double R = radius(bonus[body[ibody]].dvalue, 2);
 
   double temp_nu_0 = nu_0;
+  if (type[ibody] == 2) {
+    temp_nu_0 = nu_0 * coeff_nu_0_xy;
+  }
 
   // adding damping force, applying on mass center
   f[ibody][0] += -temp_nu_0 * (L) * v[0];
