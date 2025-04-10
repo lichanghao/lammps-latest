@@ -488,16 +488,19 @@ void FixNVEBodyAgent::apply_damping_force(int ibody, double *omega, double **f, 
   double R = radius(bonus[body[ibody]].dvalue, 2);
 
   double temp_nu_0 = nu_0;
+  if (type[ibody] == 2) {
+    temp_nu_0 = nu_0 * activity;
+  }
 
   // adding damping force, applying on mass center
-  f[ibody][0] += -temp_nu_0 * (L+4.0/3.0*R) * v[0];
-  f[ibody][1] += -temp_nu_0 * (L+4.0/3.0*R) * v[1];
-  f[ibody][2] += -temp_nu_0 * (L+4.0/3.0*R) * v[2];
+  f[ibody][0] += -temp_nu_0 * (L) * v[0];
+  f[ibody][1] += -temp_nu_0 * (L) * v[1];
+  f[ibody][2] += -temp_nu_0 * (L) * v[2];
 
   // adding damping moment
-  torque[ibody][0] += -1.0 / 12.0 * temp_nu_0 * omega[0] * std::pow(L+4.0/3.0*R, 3);
-  torque[ibody][1] += -1.0 / 12.0 * temp_nu_0 * omega[1] * std::pow(L+4.0/3.0*R, 3);
-  torque[ibody][2] += -1.0 / 12.0 * temp_nu_0 * omega[2] * std::pow(L+4.0/3.0*R, 3);
+  torque[ibody][0] += -1.0 / 12.0 * temp_nu_0 * omega[0] * std::pow(L, 3);
+  torque[ibody][1] += -1.0 / 12.0 * temp_nu_0 * omega[1] * std::pow(L, 3);
+  torque[ibody][2] += -1.0 / 12.0 * temp_nu_0 * omega[2] * std::pow(L, 3);
   
   // debug code
   #ifdef FIX_NVE_BODY_AGENT_DEBUG
@@ -518,12 +521,12 @@ void FixNVEBodyAgent::apply_damping_force(int ibody, double *omega, double **f, 
 
 void FixNVEBodyAgent::add_noise(double *f, double *mom, double given_noise_level)
 {
-  f[0] += given_noise_level * (random->uniform() - 0.5);
-  f[1] += given_noise_level * (random->uniform() - 0.5);
-  f[2] += given_noise_level * (random->uniform() - 0.5);
-  mom[0] += given_noise_level * (random->uniform() - 0.5);
-  mom[1] += given_noise_level * (random->uniform() - 0.5);
-  mom[2] += given_noise_level * (random->uniform() - 0.5);
+  f[0] += given_noise_level * 2.0 * (random->uniform() - 0.5);
+  f[1] += given_noise_level * 2.0 * (random->uniform() - 0.5);
+  f[2] += given_noise_level * 2.0 * (random->uniform() - 0.5);
+  mom[0] += given_noise_level * 2.0 * (random->uniform() - 0.5);
+  mom[1] += given_noise_level * 2.0 * (random->uniform() - 0.5);
+  mom[2] += given_noise_level * 2.0 * (random->uniform() - 0.5);
 }
 
 
