@@ -288,7 +288,7 @@ my6Vec compute_surface_damping_force(Cell *cell_1, double *v, double *omega, dou
 		// nx = -nx; ny = -ny; nz = -nz;
 	}
 
-	if (min(d1, d2) < 0 || abs(min(d1, d2)) < 1e-8)
+	if (max(d1, d2) < 0)
 	{
 		// no contact
 	}
@@ -305,15 +305,15 @@ my6Vec compute_surface_damping_force(Cell *cell_1, double *v, double *omega, dou
 				rr_0 = 0;
 			}
 		}
-		if (rr_0 != 0) printf("rr_0 : %e\n", rr_0);
+		// if (rr_0 != 0) printf("rr_0 : %e\n", rr_0);
 
 		// printf("omega: %e %e %e\n", omega[0], omega[1], omega[2]);
 		// printf("nx: %f, ny: %f, nz: %f \n", nx, ny, nz);
 		for (int i = 0; i < 5; i++)
 		{
 			double rr = quad_points[i] * L / 2;
-			fx[i] = -L * nu_1 / R * contact_area_density(cell_1, rr) * (v[0] + cross(omega[0], omega[1], omega[2], rr * nx, rr * ny, rr * nz, 0));
-			fy[i] = -L * nu_1 / R * contact_area_density(cell_1, rr) * (v[1] + cross(omega[0], omega[1], omega[2], rr * nx, rr * ny, rr * nz, 1));
+			fx[i] = -0.5 * L * nu_1 / R * contact_area_density(cell_1, rr) * (v[0] + cross(omega[0], omega[1], omega[2], rr * nx, rr * ny, rr * nz, 0));
+			fy[i] = -0.5 * L * nu_1 / R * contact_area_density(cell_1, rr) * (v[1] + cross(omega[0], omega[1], omega[2], rr * nx, rr * ny, rr * nz, 1));
 			fz[i] = 0;
 			// fz[i] = -L * nu_1 / R * (v[2] + cross(omega[0], omega[1], omega[2], rr * nx, rr * ny, rr * nz, 2));
 			// printf("fx: %f, fy: %f \n", fx[i], fy[i]);
@@ -325,16 +325,13 @@ my6Vec compute_surface_damping_force(Cell *cell_1, double *v, double *omega, dou
 
 		// if (nz > 0) rr_0 = -L/2;
 		// else rr_0 = L/2;
-		double extra_x = -L * nu_1 / R * M_PI * R * sin2_theta * (v[0] + cross(omega[0], omega[1], omega[2], rr_0 * nx, rr_0 * ny, rr_0 * nz, 0));
-		double extra_y = -L * nu_1 / R * M_PI * R * sin2_theta * (v[1] + cross(omega[0], omega[1], omega[2], rr_0 * nx, rr_0 * ny, rr_0 * nz, 1));
-		double extra_z = -L * nu_1 / R * M_PI * R * sin2_theta * (v[2] + cross(omega[0], omega[1], omega[2], rr_0 * nx, rr_0 * ny, rr_0 * nz, 2));
 		
-		damping.x = gaussian_quadrature(fx, weights, 5) + extra_x;
-		damping.y = gaussian_quadrature(fy, weights, 5) + extra_y;
+		damping.x = gaussian_quadrature(fx, weights, 5);
+		damping.y = gaussian_quadrature(fy, weights, 5);
 		damping.z = 0;
-		damping.nx = gaussian_quadrature(mx, weights, 5) + cross(rr_0*nx, rr_0*ny, rr_0*nz, extra_x, extra_y, 0, 0);
-		damping.ny = gaussian_quadrature(my, weights, 5) + cross(rr_0*nx, rr_0*ny, rr_0*nz, extra_x, extra_y, 0, 1);
-		damping.nz = gaussian_quadrature(mz, weights, 5) + cross(rr_0*nx, rr_0*ny, rr_0*nz, extra_x, extra_y, 0, 2);
+		damping.nx = gaussian_quadrature(mx, weights, 5);
+		damping.ny = gaussian_quadrature(my, weights, 5);
+		damping.nz = gaussian_quadrature(mz, weights, 5);
 
 		// printf("Velocities: %f %f %f %f %f %f \n", v[0], v[1], v[2], omega[0], omega[1], omega[2]);
 		// printf("Forces: %f %f %f %f %f %f\n", damping.x, damping.y, damping.z, damping.nx, damping.ny, damping.nz);
@@ -360,9 +357,10 @@ double contact_area_density(Cell *cell_1, double rr)
 	double cos2_theta = 1 - sin2_theta;
 
 	double delta = R - (z + rr * nz);
+	double H_delta = delta > 0 ? 1 : 0;
 
 	if (delta > 0)
-		return sqrt(R) * cos2_theta * sqrt(delta);
+		return sqrt(R) * cos2_theta * sqrt(delta) + M_PI * R * sin2_theta * H_delta;
 	else
 		return 0;
 }

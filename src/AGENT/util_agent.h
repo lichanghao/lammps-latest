@@ -1,15 +1,31 @@
 /* ----------------------------------------------------------------------
-    Author: Changhao Li (czl478@psu.edu, changhaoli1997@gmail.com)
     This header file defines some utility classes for Dan Sunday's algorithm of minimum distance
     between two line segments. The algorithm is implemented in myutil.cpp.
 
     To activate macro functions above, use "#define MY_UTIL" in your cpp file.
 ------------------------------------------------------------------------- */
 
+/**
+ * Cell-cell distance calculations.
+ *
+ * Authors:
+ *     Changhao Li, Kee-Myoung Nam
+ *
+ * Last updated:
+ *     4/14/2025
+ */
+
 #pragma once
 #include <cmath>
 #include <cstdlib>
 #include <cstdio>
+#include <algorithm>
+#include <utility>
+#include <vector>
+#include <unordered_set>
+
+using std::abs;
+using std::sqrt;
 
 // activate macro functions
 #ifdef MY_UTIL
@@ -18,7 +34,7 @@
 // dot product (3D) which allows vector operations in arguments
 #define dot(u, v) ((u).x * (v).x + (u).y * (v).y + (u).z * (v).z)
 #define norm(v) sqrt(dot(v, v))        // norm = length of  vector
-#define d(u, v) norm(u - v)            // distance = norm of difference
+#define dist(u, v) norm(u - v)            // distance = norm of difference
 #define abs(x) ((x) >= 0 ? (x) : -(x)) //  absolute value
 
 #endif
@@ -30,17 +46,27 @@ public:
     double x;
     double y;
     double z;
+    Vector()
+    {
+        x = 0;
+        y = 0;
+        z = 0;
+    }
     Vector(double xx, double yy, double zz)
     {
         x = xx;
         y = yy;
         z = zz;
     }
+
     Vector operator+(const Vector &v) { return Vector(x + v.x, y + v.y, z + v.z); }
     Vector operator-(const Vector &v) { return Vector(x - v.x, y - v.y, z - v.z); }
     Vector operator*(double i) { return Vector(i * x, i * y, i * z); }
     Vector operator*(float i) { return Vector(i * x, i * y, i * z); }
     Vector operator*(int i) { return Vector(i * x, i * y, i * z); }
+    Vector operator/(double i) { return Vector(x / i, y / i, z / i); }
+    Vector operator/(float i) { return Vector(x / i, y / i, z / i); }
+    Vector operator/(int i) { return Vector(x / i, y / i, z / i); }
 
     friend Vector operator*(double, const Vector &);
     friend Vector operator*(float, const Vector &);
@@ -79,17 +105,17 @@ public:
 class Line
 {
 public:
-    Point P0;
-    Point P1;
+    Vector P0;
+    Vector P1;
 };
 
 // line segment, defined by two points
 class Segment
 {
 public:
-    Point P0;
-    Point P1;
-    Segment(Point iP0, Point iP1)
+    Vector P0;
+    Vector P1;
+    Segment(Vector iP0, Vector iP1)
     {
         P0 = iP0;
         P1 = iP1;
@@ -107,7 +133,7 @@ public:
 class Track
 {
 public:
-    Point P0;
+    Vector P0;
     Vector v;
 };
 
@@ -122,6 +148,8 @@ inline Point operator+(const Vector &v, const Point &p) { return Point(v.x + p.x
 inline Vector operator*(double i, const Vector &v) { return Vector(i * v.x, i * v.y, i * v.z); }
 inline Vector operator*(float i, const Vector &v) { return Vector(i * v.x, i * v.y, i * v.z); }
 inline Vector operator*(int i, const Vector &v) { return Vector(i * v.x, i * v.y, i * v.z); }
+
+float nearestCellBodyCoordToPoint(Vector r, Vector n, const float half_l, Vector q);
 
 // LAMMPS workhorse function, to calculate distance between two line segments
 // used in pair_body_rounded_polyhedron_agent.cpp
