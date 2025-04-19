@@ -553,10 +553,17 @@ void FixNVEBodyAgent::apply_cell_surface_force(int ibody, double *omega, double 
   vector<double> cell_vel = {v[0], v[1], v[2]};
   vector<double> cell_omega = {omega[0], omega[1], omega[2]};
 
+  double cell_surface_adhesion = sigma_0;
+  double cell_surface_friction = nu_1;
+  if (type[ibody] == 2) {
+    cell_surface_adhesion = sigma_0 * coeff_nu_0_xy;
+    cell_surface_friction = nu_1 * coeff_nu_0_xy;
+  }
+
   if (center_coords[2] - ori_vec[2]*L/2.0 < R) {
     vector<double> cell_surface_repulsion_force = cellSurfaceRepulsionForce(center_coords, ori_vec, L/2.0, R, E_EPS);
-    vector<double> cell_surface_adhesion_force = cellSurfaceAdhesionForce(center_coords, ori_vec, L/2.0, R, sigma_0);
-    vector<double> cell_surface_friction_force = cellSurfaceFrictionForce(center_coords, ori_vec, L/2.0, cell_vel, cell_omega, R, nu_1);
+    vector<double> cell_surface_adhesion_force = cellSurfaceAdhesionForce(center_coords, ori_vec, L/2.0, R, cell_surface_adhesion);
+    vector<double> cell_surface_friction_force = cellSurfaceFrictionForce(center_coords, ori_vec, L/2.0, cell_vel, cell_omega, R, cell_surface_friction);
     for (int j = 0; j < 3; j++) {
       f[ibody][j] += cell_surface_repulsion_force[j] + cell_surface_adhesion_force[j] + cell_surface_friction_force[j];
       torque[ibody][j] += cell_surface_repulsion_force[j+3] + cell_surface_adhesion_force[j+3] + cell_surface_friction_force[j+3];
