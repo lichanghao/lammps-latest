@@ -8,13 +8,13 @@ SHELL = /bin/sh
 # unless additional compiler/linker flags or libraries needed for your machine
 
 CC =	 	mpicxx
-CCFLAGS =	-O3  -std=c++11
+CCFLAGS =	-O3  -std=c++14 -I/opt/homebrew/Cellar/boost/1.88.0/include -I/opt/homebrew/Cellar/gmp/6.3.0/include -I/opt/homebrew/Cellar/mpfr/4.2.2/include
 SHFLAGS =	-fPIC
 DEPFLAGS =	-M
 
 LINK =		mpicxx
-LINKFLAGS =	-O3 -std=c++11
-LIB =           
+LINKFLAGS =	-O3 -std=c++14 -L/opt/homebrew/Cellar/boost/1.88.0/lib -L/opt/homebrew/Cellar/gmp/6.3.0/lib -L/opt/homebrew/Cellar/mpfr/4.2.2/lib
+LIB =       -lmpfr -lgmp    
 SIZE =		size
 
 ARCHIVE =	ar

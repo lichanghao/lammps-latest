@@ -37,6 +37,7 @@
 #include "comm.h"
 
 #include "util_fibrin.h"
+// #include "util_cellSurfaceForces.h"
 
 using namespace LAMMPS_NS;
 using namespace FixConst;
@@ -659,14 +660,22 @@ int FixWallBodyPolyhedronAgent::compute_distance_to_wall(int ibody, int edge_ind
   double ny = (xpi2[1] - xpi1[1]) / L;
   double nz = (xpi2[2] - xpi1[2]) / L;
 
-  double center_coords[3] = {xmi[0], xmi[1], xmi[2]};
-  double ori_vec[3] = {nx, ny, nz};
+  vector<double> center_coords = {xmi[0], xmi[1], xmi[2]};
+  vector<double> ori_vec = {nx, ny, nz};
+  if (ori_vec[2] < 0) {
+    ori_vec[0] = -ori_vec[0];
+    ori_vec[1] = -ori_vec[1];
+    ori_vec[2] = -ori_vec[2];
+  }
   Cell cell = Cell(center_coords[0], center_coords[1], center_coords[2], ori_vec[0], ori_vec[1], ori_vec[2], L);
 
   double omega[3] = {0};
   double *inertia = bonus[body[ibody]].inertia;
   double *quat = bonus[body[ibody]].quat;
   MathExtra::mq_to_omega(angmom[ibody], quat, inertia, omega);
+
+  vector<double> cell_vel = {v[ibody][0], v[ibody][1], v[ibody][2]};
+  vector<double> cell_omega = {omega[0], omega[1], omega[2]};
 
   distance(hi, xpi1, d1);
 
@@ -695,7 +704,14 @@ int FixWallBodyPolyhedronAgent::compute_distance_to_wall(int ibody, int edge_ind
         nu = c_n * activity;
         A = c_t * activity;
       }
-      contact_forces_new(ibody, &cell, v[ibody], omega, f, torque, kn, nu, A, 0, hard_core_scaling, hard_core_threshold, rounded_radius_i);
+      // contact_forces_new(ibody, &cell, v[ibody], omega, f, torque, kn, nu, A, 0, hard_core_scaling, hard_core_threshold, rounded_radius_i);
+      // vector<double> cell_surface_repulsion_force = cellSurfaceRepulsionForce(center_coords, ori_vec, L/2.0, 1.0, kn);
+      // vector<double> cell_surface_adhesion_force = cellSurfaceAdhesionForce(center_coords, ori_vec, L/2.0, 1.0, A);
+      // vector<double> cell_surface_friction_force = cellSurfaceFrictionForce(center_coords, ori_vec, L/2.0, cell_vel, cell_omega, 1.0, nu);
+      // for (int j = 0; j < 3; j++) {
+      //   f[ibody][j] += cell_surface_repulsion_force[j] + cell_surface_adhesion_force[j] + cell_surface_friction_force[j];
+      //   torque[ibody][j] += cell_surface_repulsion_force[j+3] + cell_surface_adhesion_force[j+3] + cell_surface_friction_force[j+3];
+      // }
       force_flag = 1;
     }
 
@@ -745,7 +761,14 @@ int FixWallBodyPolyhedronAgent::compute_distance_to_wall(int ibody, int edge_ind
         nu = c_n * activity;
         A = c_t * activity;
       }
-      contact_forces_new(ibody, &cell, v[ibody], omega, f, torque, kn, nu, A, 0, hard_core_scaling, hard_core_threshold, rounded_radius_i);
+      // contact_forces_new(ibody, &cell, v[ibody], omega, f, torque, kn, nu, A, 0, hard_core_scaling, hard_core_threshold, rounded_radius_i);
+      // vector<double> cell_surface_repulsion_force = cellSurfaceRepulsionForce(center_coords, ori_vec, L/2.0, R, kn);
+      // vector<double> cell_surface_adhesion_force = cellSurfaceAdhesionForce(center_coords, ori_vec, L/2.0, R, A);
+      // vector<double> cell_surface_friction_force = cellSurfaceFrictionForce(center_coords, ori_vec, L/2.0, cell_vel, cell_omega, R, nu);
+      // for (int j = 0; j < 3; j++) {
+      //   f[ibody][j] += cell_surface_repulsion_force[j] + cell_surface_adhesion_force[j] + cell_surface_friction_force[j];
+      //   torque[ibody][j] += cell_surface_repulsion_force[j+3] + cell_surface_adhesion_force[j+3] + cell_surface_friction_force[j+3];
+      // }
       force_flag = 1;
     }
 

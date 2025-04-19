@@ -19,6 +19,7 @@
 ------------------------------------------------------------------------- */
 
 #include <cmath>
+#include <vector>
 #include "fix_nve_body_agent.h"
 #include "math_extra.h"
 #include "atom.h"
@@ -29,8 +30,11 @@
 #include "comm.h"
 #include "random_park.h"
 
+#include "util_cellSurfaceForces.h"
+
 using namespace LAMMPS_NS;
 using namespace FixConst;
+using std::vector;
 
 #define INITIAL_MASS (1e-3*mass_scaling)
 #define INITIAL_INERTIA_x (5e-4*mass_scaling)
@@ -57,8 +61,10 @@ FixNVEBodyAgent::FixNVEBodyAgent(LAMMPS *lmp, int narg, char **arg) :
   read_params(narg, arg);
 
   // random generator (seed = current time + processor_id)
-  int seed = static_cast<int> (time(NULL));
-  random = new RanPark(lmp, seed + comm->me);
+  if (random_seed == 0) {
+    random_seed = static_cast<int> (time(NULL)); // if random seed is not given, use the current time
+  }
+  random = new RanPark(lmp, random_seed + comm->me);
 
   // initiate peratom vector for growth rates, Gaussian distribution ~ N(growth_rate, growth_standard_dev)
   int nlocal = atom->nlocal;
@@ -181,6 +187,9 @@ void FixNVEBodyAgent::initial_integrate(int /*vflag*/)
       quat = bonus[body[i]].quat;
       MathExtra::mq_to_omega(angmom[i], quat, inertia, omega);
       apply_damping_force(i, omega, f, torque);
+
+      // apply cell-surface forces
+      apply_cell_surface_force(i, omega, f, torque);
       
       // apply infinitesimal noise to break symmetry
       add_noise(f[i], torque[i], noise_level);
@@ -516,6 +525,54 @@ void FixNVEBodyAgent::apply_damping_force(int ibody, double *omega, double **f, 
 
 
 /* ----------------------------------------------------------------------
+  Apply cell-surface interactions
+---------------------------------------------------------------------- */
+
+void FixNVEBodyAgent::apply_cell_surface_force(int ibody, double *omega, double **f, double **torque)
+{
+  AtomVecBody::Bonus *bonus = avec->bonus;
+  double *x = (atom->x)[ibody];
+  double *v = (atom->v)[ibody];
+  int *body = atom->body;
+  int *type = atom->type;
+  double L = length(bonus[body[ibody]].dvalue);
+  double R = radius(bonus[body[ibody]].dvalue, 2);
+
+  vector<double> center_coords = {x[0], x[1], x[2]};
+  double temp[6];
+  for (int j = 0; j < 6; j++)
+    temp[j] = bonus[body[ibody]].dvalue[j];
+  double cc[6];
+  body2space(temp, bonus[body[ibody]].quat, cc);
+  vector<double> ori_vec = {cc[0]/L*2, cc[1]/L*2, cc[2]/L*2};
+  if (ori_vec[2] < 0) {
+    ori_vec[0] = -ori_vec[0];
+    ori_vec[1] = -ori_vec[1];
+    ori_vec[2] = -ori_vec[2];
+  }
+  vector<double> cell_vel = {v[0], v[1], v[2]};
+  vector<double> cell_omega = {omega[0], omega[1], omega[2]};
+
+  if (center_coords[2] - ori_vec[2]*L/2.0 < R) {
+    vector<double> cell_surface_repulsion_force = cellSurfaceRepulsionForce(center_coords, ori_vec, L/2.0, R, E_EPS);
+    vector<double> cell_surface_adhesion_force = cellSurfaceAdhesionForce(center_coords, ori_vec, L/2.0, R, sigma_0);
+    vector<double> cell_surface_friction_force = cellSurfaceFrictionForce(center_coords, ori_vec, L/2.0, cell_vel, cell_omega, R, nu_1);
+    for (int j = 0; j < 3; j++) {
+      f[ibody][j] += cell_surface_repulsion_force[j] + cell_surface_adhesion_force[j] + cell_surface_friction_force[j];
+      torque[ibody][j] += cell_surface_repulsion_force[j+3] + cell_surface_adhesion_force[j+3] + cell_surface_friction_force[j+3];
+    }
+  }
+
+  if (center_coords[2] - ori_vec[2]*L/2.0 < R - hc_threshold) {
+    vector<double> cell_surface_repulsion_force = cellSurfaceRepulsionForce(center_coords, ori_vec, L/2.0, R - hc_threshold, E_EPS * hc_scaling);
+    for (int j = 0; j < 3; j++) {
+      f[ibody][j] += cell_surface_repulsion_force[j];
+      torque[ibody][j] += cell_surface_repulsion_force[j+3];
+    }
+  }
+}
+
+/* ----------------------------------------------------------------------
   Adding noise to force vector and moment vector
 ---------------------------------------------------------------------- */
 
@@ -714,10 +771,17 @@ void FixNVEBodyAgent::read_params(int narg, char **arg)
   coeff_nu_0_z = 1;
   z_damp_height = 0;
   mass_scaling = 1;
+  random_seed = 0;
+  E_EPS = 0;
+  sigma_0 = 0;
+  nu_1 = 0;
+  hc_threshold = 100;
+  hc_scaling = 1;
 
   if (narg != 3 && narg != 6 && narg != 8 && narg != 10 && narg != 12 && 
       narg != 14 && narg != 16 && narg != 18 && narg != 20 && narg != 22 &&
-      narg != 24) {
+      narg != 24 && narg != 26 && narg != 28 && narg != 30 && narg != 32 &&
+      narg != 34 && narg != 36) {
     error->all(FLERR, "Invalid fix nve/body/agent command, incorrect number of input parameters");
   }
 
@@ -769,6 +833,30 @@ void FixNVEBodyAgent::read_params(int narg, char **arg)
     {
       out_interval = utils::numeric(FLERR, arg[i + 1], false, lmp);
     }
+    if (strcmp(arg[i], "random_seed") == 0)
+    {
+      random_seed = utils::numeric(FLERR, arg[i + 1], false, lmp);
+    }
+    if (strcmp(arg[i], "E_EPS") == 0)
+    {
+      E_EPS = utils::numeric(FLERR, arg[i + 1], false, lmp);
+    }
+    if (strcmp(arg[i], "sigma_0") == 0)
+    {
+      sigma_0 = utils::numeric(FLERR, arg[i + 1], false, lmp);
+    }
+    if (strcmp(arg[i], "nu_1") == 0)
+    {
+      nu_1 = utils::numeric(FLERR, arg[i + 1], false, lmp);
+    }
+    if (strcmp(arg[i], "hard_core_threshold") == 0)
+    {
+      hc_threshold = utils::numeric(FLERR, arg[i + 1], false, lmp);
+    }
+    if (strcmp(arg[i], "hard_core_scaling") == 0)
+    {
+      hc_scaling = utils::numeric(FLERR, arg[i + 1], false, lmp);
+    }
   }
 
   if (comm->me == 0) {
@@ -783,6 +871,12 @@ void FixNVEBodyAgent::read_params(int narg, char **arg)
     printf("coeff_nu_0_xy = %f\n", coeff_nu_0_xy);
     printf("coeff_nu_0_z = %f\n", coeff_nu_0_z);
     printf("z_damp_height = %f\n", z_damp_height);
+    printf("E_EPS = %f\n", E_EPS);
+    printf("sigma_0 = %f\n", sigma_0);
+    printf("nu_1 = %f\n", nu_1);
+    printf("hc_threshold = %f\n", hc_threshold);
+    printf("hc_scaling = %f\n", hc_scaling);
+    printf("random_seed = %i\n", random_seed);
     printf("-------------------------------------------------------------------\n\n");
   }
 }

@@ -39,6 +39,7 @@ class FixNVEBodyAgent : public FixNVE {
   int out_interval;              // output timestep interval
   int nmax;                      // recorded maximum number of atoms
   int maxtag_all;                // current maximum tag number across all processors
+  int random_seed;               // random seed
   double growth_rate;            // expectation of growth rate, unit is 1/[T]
   double growth_standard_dev;    // standard derivation of growth rate
   double L_max;                  // maximum length for proliferation
@@ -49,7 +50,12 @@ class FixNVEBodyAgent : public FixNVE {
   double coeff_nu_0_xy;          // fold of 3D env viscosity difference on x-y direction
   double coeff_nu_0_z;           // z_direction fold of env viscosity difference
   double z_damp_height;          // apply nu_0 difference above this height
-  double mass_scaling;
+  double mass_scaling;           // mass scaling parameter for numerical stability
+  double E_EPS;                  // elastic modulus of EPS
+  double sigma_0;                // cell-surface adhesion
+  double nu_1;                   // surface drag coefficient 
+  double hc_threshold;           // R_ECM - R_cell
+  double hc_scaling;             // scaling factor for hard core potential
 
   double *growth_rates_all;      // peratom vector for growth rates
   double *birth_time_all;
@@ -65,6 +71,7 @@ class FixNVEBodyAgent : public FixNVE {
   void body2space(double*, double*, double*);                                 // convert a vector in body frame to space frame
   void translate_single_body(int, double*);                                   // give a displacement to a cell
   void apply_damping_force(int, double*, double**, double**);                 // environmental viscous force
+  void apply_cell_surface_force(int, double*, double**, double**);            // cell-surface interaction forces   
   double radius(double*, int);                                                // return the radius of a cell
   double length(double*);                                                     // return the length of a cell
   void set_force(int, double, double, double, double, double, double);        // manually set the force and the torque for a given cell
