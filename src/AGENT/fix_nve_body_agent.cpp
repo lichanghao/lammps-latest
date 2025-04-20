@@ -574,7 +574,7 @@ void FixNVEBodyAgent::apply_cell_surface_force(int ibody, double *omega, double 
     vector<double> cell_surface_repulsion_force = cellSurfaceRepulsionForce(center_coords, ori_vec, L/2.0, R - hc_threshold, E_EPS * hc_scaling);
     for (int j = 0; j < 3; j++) {
       f[ibody][j] += cell_surface_repulsion_force[j];
-      // torque[ibody][j] += cell_surface_repulsion_force[j+3];
+      torque[ibody][j] += cell_surface_repulsion_force[j+3];
     }
   }
 }
