@@ -307,8 +307,8 @@ float dist3D_Segment_to_Segment(Segment S1, Segment S2, double &t1, double &t2)
         }
 
         // Set return values 
-        t1 = s; 
-        t2 = t; 
+        t1 = 0.5 * (s / half_l1 + 1); 
+        t2 = 0.5 * (t / half_l2 + 1); 
         return sqrt(dot(d, d)); 
     }
     else

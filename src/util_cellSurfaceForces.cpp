@@ -45,7 +45,7 @@ std::vector<double> cellSurfaceRepulsionForce(std::vector<double>& r,
                                               const double R, const double E0)
 {
     std::vector<double> force {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-    const double EPSILON = 1e-8; 
+    const double EPSILON = 1e-6; 
     const double l = 2 * half_l;  
 
     // If the z-coordinate of the cell's orientation is near zero ... 
@@ -110,7 +110,7 @@ std::vector<double> cellSurfaceAdhesionForce(std::vector<double>& r,
                                              const double sigma0)
 {
     std::vector<double> force {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-    const double EPSILON = 1e-8; 
+    const double EPSILON = 1e-6; 
     const double l = 2 * half_l;  
 
     // If the z-coordinate of the cell's orientation is near zero ... 
@@ -181,7 +181,7 @@ std::vector<double> cellSurfaceFrictionForce(std::vector<double>& r,
                                              const double R, const double eta)
 {
     std::vector<double> force {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-    const double EPSILON = 1e-8;
+    const double EPSILON = 1e-6;
     std::vector<double> q {dr[0], dr[1], 0.0};
     std::vector<double> m {
         omega[1] * n[2] - omega[2] * n[1], 

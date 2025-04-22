@@ -59,6 +59,7 @@ class FixNVEBodyAgent : public FixNVE {
 
   double *growth_rates_all;      // peratom vector for growth rates
   double *birth_time_all;
+  int *mother_id;
 
   class AtomVecBody *avec;       // pointer to AtomVecBody class
   class AtomVec *avec_hybrid;    // pointer to AtomVecHybrid class if hybrid style is used, otherwise same as avec

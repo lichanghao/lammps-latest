@@ -72,10 +72,12 @@ FixNVEBodyAgent::FixNVEBodyAgent(LAMMPS *lmp, int narg, char **arg) :
   int *mask = atom->mask;
   memory->create(growth_rates_all, nmax, "fix/nve/body/agent:growth_rates_all");
   memory->create(birth_time_all, nmax, "fix/nve/body/agent:birth_time_all");
+  memory->create(mother_id, nmax, "fix/nve/body/agent:mother_id");
   for (int i = 0; i < nlocal; i++) {
     // if (mask[i] & groupbit)
       growth_rates_all[i] = random->gaussian() * growth_standard_dev + growth_rate;
       birth_time_all[i] = 0;
+      mother_id[i] = 0;
   }
 
   atom->add_callback(Atom::GROW);
@@ -133,6 +135,7 @@ FixNVEBodyAgent::~FixNVEBodyAgent()
   atom->delete_callback(id, Atom::BORDER);
   memory->destroy(growth_rates_all);
   memory->destroy(birth_time_all);
+  memory->destroy(mother_id);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -373,6 +376,7 @@ void FixNVEBodyAgent::proliferate_single_body(int ibody, bool &is_dividing)
     // should use hash style atom map instead to avoid this problem
     tagint newtag = maxtag_all + static_cast<tagint>(random->uniform() * (MAX_TAG - maxtag_all));
     atom->tag[new_body_index] = newtag;
+    mother_id[new_body_index] = static_cast<int>(atom->tag[ibody]);
     // atom->tag[new_body_index] = -1;
 
     // forcing no net external forces
@@ -411,6 +415,7 @@ void FixNVEBodyAgent::proliferate_single_body(int ibody, bool &is_dividing)
     }
     growth_rates_all[new_body_index] = random->gaussian() * growth_standard_dev + growth_rate;
     birth_time_all[new_body_index] = update->ntimestep * dtf * 2;
+    birth_time_all[ibody] = update->ntimestep * dtf * 2;
   }
 }
 
@@ -954,7 +959,7 @@ void FixNVEBodyAgent::write_frame()
         body2space(temp, bonus[body[i]].quat, cc);
         double *c1 = cc;
         double *c2 = cc + 3;
-        fprintf(fp, "%f %f %f %f %f %f %f %f %f %d\n", 0.8*x[i][0], 0.8*x[i][1], 0.8*x[i][2], -c1[0]/L*2, -c1[1]/L*2, -c1[2]/L*2, 0.8*L, growth_rates_all[i], birth_time_all[i], atom->type[i]);
+        fprintf(fp, "%f %f %f %f %f %f %f %f %f %d %d %d\n", 0.8*x[i][0], 0.8*x[i][1], 0.8*x[i][2], -c1[0]/L*2, -c1[1]/L*2, -c1[2]/L*2, 0.8*L, growth_rates_all[i], birth_time_all[i], atom->type[i], atom->tag[i], mother_id[i]);
       }
     }
   }

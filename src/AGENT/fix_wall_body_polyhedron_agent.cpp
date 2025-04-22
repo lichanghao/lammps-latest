@@ -704,7 +704,7 @@ int FixWallBodyPolyhedronAgent::compute_distance_to_wall(int ibody, int edge_ind
         nu = c_n * activity;
         A = c_t * activity;
       }
-      // contact_forces_new(ibody, &cell, v[ibody], omega, f, torque, kn, nu, A, 0, hard_core_scaling, hard_core_threshold, rounded_radius_i);
+      contact_forces_new(ibody, &cell, v[ibody], omega, f, torque, kn, nu, A, 0, hard_core_scaling, hard_core_threshold, rounded_radius_i);
       // vector<double> cell_surface_repulsion_force = cellSurfaceRepulsionForce(center_coords, ori_vec, L/2.0, 1.0, kn);
       // vector<double> cell_surface_adhesion_force = cellSurfaceAdhesionForce(center_coords, ori_vec, L/2.0, 1.0, A);
       // vector<double> cell_surface_friction_force = cellSurfaceFrictionForce(center_coords, ori_vec, L/2.0, cell_vel, cell_omega, 1.0, nu);
@@ -761,7 +761,7 @@ int FixWallBodyPolyhedronAgent::compute_distance_to_wall(int ibody, int edge_ind
         nu = c_n * activity;
         A = c_t * activity;
       }
-      // contact_forces_new(ibody, &cell, v[ibody], omega, f, torque, kn, nu, A, 0, hard_core_scaling, hard_core_threshold, rounded_radius_i);
+      contact_forces_new(ibody, &cell, v[ibody], omega, f, torque, kn, nu, A, 0, hard_core_scaling, hard_core_threshold, rounded_radius_i);
       // vector<double> cell_surface_repulsion_force = cellSurfaceRepulsionForce(center_coords, ori_vec, L/2.0, R, kn);
       // vector<double> cell_surface_adhesion_force = cellSurfaceAdhesionForce(center_coords, ori_vec, L/2.0, R, A);
       // vector<double> cell_surface_friction_force = cellSurfaceFrictionForce(center_coords, ori_vec, L/2.0, cell_vel, cell_omega, R, nu);
