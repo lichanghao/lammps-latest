@@ -685,6 +685,7 @@ void FixNVEBodyAgent::grow_arrays(int n)
 {
   memory->grow(growth_rates_all, n, "fix/nve/body/agent:growth_rates_all");
   memory->grow(birth_time_all, n, "fix/nve/body/agent:birth_time_all");
+  memory->grow(mother_id, n, "fix/nve/body/agent:mother_id");
   vector_atom = growth_rates_all;
 }
 
