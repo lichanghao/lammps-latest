@@ -53,7 +53,7 @@ FixNVEBodyAgent::FixNVEBodyAgent(LAMMPS *lmp, int narg, char **arg) :
 { 
   // set fix parent class tags, indicating this fix creates a scalar array per atom
   peratom_flag = 1;
-  size_peratom_cols = 0;
+  size_peratom_cols = 3;
   peratom_freq = 1;
   time_integrate = 1;
 
@@ -70,14 +70,14 @@ FixNVEBodyAgent::FixNVEBodyAgent(LAMMPS *lmp, int narg, char **arg) :
   int nlocal = atom->nlocal;
   nmax = atom->nmax;
   int *mask = atom->mask;
-  memory->create(growth_rates_all, nmax, "fix/nve/body/agent:growth_rates_all");
-  memory->create(birth_time_all, nmax, "fix/nve/body/agent:birth_time_all");
-  memory->create(mother_id, nmax, "fix/nve/body/agent:mother_id");
+  memory->create(array, nmax, size_peratom_cols, "fix/nve/body/agent:array");
+  array_atom = array;
   for (int i = 0; i < nlocal; i++) {
     // if (mask[i] & groupbit)
-      growth_rates_all[i] = random->gaussian() * growth_standard_dev + growth_rate;
-      birth_time_all[i] = 0;
-      mother_id[i] = 0;
+      for (int j = 0; j < size_peratom_cols; j++) {
+        array[i][j] = 0;
+      }
+      array[i][0] = random->gaussian() * growth_standard_dev + growth_rate;
   }
 
   atom->add_callback(Atom::GROW);
@@ -116,6 +116,8 @@ void FixNVEBodyAgent::init()
     if (mask[i] & groupbit)
       if (body[i] < 0) error->one(FLERR,"Fix nve/body/agent requires bodies");
 
+
+  // custom output file, only work for single processor test
   const char *filename = "center.dump";
   if (comm->me == 0) {
     fp = fopen(filename, "w");
@@ -133,9 +135,7 @@ FixNVEBodyAgent::~FixNVEBodyAgent()
       fclose(fp);
   atom->delete_callback(id, Atom::GROW);
   atom->delete_callback(id, Atom::BORDER);
-  memory->destroy(growth_rates_all);
-  memory->destroy(birth_time_all);
-  memory->destroy(mother_id);
+  memory->destroy(array);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -305,7 +305,7 @@ void FixNVEBodyAgent::final_integrate()
       angmom[i][1] += dtf * torque[i][1];
       angmom[i][2] += dtf * torque[i][2];
 
-      grow_single_body(i, growth_rates_all[i]);
+      grow_single_body(i, array[i][0]);
     }
 }
 
@@ -376,7 +376,6 @@ void FixNVEBodyAgent::proliferate_single_body(int ibody, bool &is_dividing)
     // should use hash style atom map instead to avoid this problem
     tagint newtag = maxtag_all + static_cast<tagint>(random->uniform() * (MAX_TAG - maxtag_all));
     atom->tag[new_body_index] = newtag;
-    mother_id[new_body_index] = static_cast<int>(atom->tag[ibody]);
     // atom->tag[new_body_index] = -1;
 
     // forcing no net external forces
@@ -413,9 +412,13 @@ void FixNVEBodyAgent::proliferate_single_body(int ibody, bool &is_dividing)
       nmax = atom->nmax;
       grow_arrays(nmax);
     }
-    growth_rates_all[new_body_index] = random->gaussian() * growth_standard_dev + growth_rate;
-    birth_time_all[new_body_index] = update->ntimestep * dtf * 2;
-    birth_time_all[ibody] = update->ntimestep * dtf * 2;
+    // assign new growth rate
+    array[new_body_index][0] = random->gaussian() * growth_standard_dev + growth_rate;
+    // assign new birth time
+    array[new_body_index][1] = update->ntimestep * dtf * 2;
+    array[ibody][1] = update->ntimestep * dtf * 2;
+    // assign new mother id
+    array[new_body_index][2] = static_cast<double>(atom->tag[ibody]);
   }
 }
 
@@ -683,10 +686,8 @@ void FixNVEBodyAgent::copy_atom(int ibody, int jbody)
 
 void FixNVEBodyAgent::grow_arrays(int n)
 {
-  memory->grow(growth_rates_all, n, "fix/nve/body/agent:growth_rates_all");
-  memory->grow(birth_time_all, n, "fix/nve/body/agent:birth_time_all");
-  memory->grow(mother_id, n, "fix/nve/body/agent:mother_id");
-  vector_atom = growth_rates_all;
+  memory->grow(array, n, size_peratom_cols, "fix/nve/body/agent:array");
+  array_atom = array;
 }
 
 /* ----------------------------------------------------------------------
@@ -695,7 +696,7 @@ void FixNVEBodyAgent::grow_arrays(int n)
 
 double FixNVEBodyAgent::memory_usage()
 {
-  double bytes = (double) atom->nmax * 1 * sizeof(double);
+  double bytes = (double) atom->nmax * size_peratom_cols * sizeof(double);
   return bytes;
 }
 
@@ -705,7 +706,9 @@ double FixNVEBodyAgent::memory_usage()
 
 void FixNVEBodyAgent::copy_arrays(int i, int j, int /*delflag*/)
 {
-  growth_rates_all[j] = growth_rates_all[i];
+  for (int m = 0; m < size_peratom_cols; m++) {
+    array[j][m] = array[i][m];
+  }
 }
 
 /* ----------------------------------------------------------------------
@@ -714,7 +717,9 @@ void FixNVEBodyAgent::copy_arrays(int i, int j, int /*delflag*/)
 
 void FixNVEBodyAgent::set_arrays(int i)
 {
-  growth_rates_all[i] = 0;
+  for (int m = 0; m < size_peratom_cols; m++) {
+    array[i][m] = 0;
+  }
 }
 
 /* ----------------------------------------------------------------------
@@ -723,9 +728,10 @@ void FixNVEBodyAgent::set_arrays(int i)
 
 int FixNVEBodyAgent::pack_exchange(int i, double *buf)
 {
-  int n = 0;
-  buf[n++] = growth_rates_all[i];
-  return n;
+  for (int m = 0; m < size_peratom_cols; m++) {
+    buf[m] = array[i][m];
+  }
+  return size_peratom_cols;
 }
 
 /* ----------------------------------------------------------------------
@@ -734,9 +740,10 @@ int FixNVEBodyAgent::pack_exchange(int i, double *buf)
 
 int FixNVEBodyAgent::unpack_exchange(int nlocal, double *buf)
 {
-  int n = 0;
-  growth_rates_all[nlocal] = buf[n++];
-  return n;
+  for (int m = 0; m < size_peratom_cols; m++) {
+    array[nlocal][m] = buf[m];
+  }
+  return size_peratom_cols;
 }
 
 /* ----------------------------------------------------------------------
@@ -745,12 +752,16 @@ int FixNVEBodyAgent::unpack_exchange(int nlocal, double *buf)
 
 int FixNVEBodyAgent::pack_border(int n, int *list, double *buf)
 {
-    int m = 0;
-    for (int i = 0; i < n; i++) {
-        int j = list[i];
-        buf[m++] = growth_rates_all[j]; // you can use ubuf() in lmptype.h to avoid compiler warnings for type conversion, but it is not needed here
+  // pack buf for border com
+  int i,j;
+  int m = 0;
+    for (i = 0; i < n; i++) {
+      j = list[i];
+      for (int k = 0; k < size_peratom_cols; k++) {
+        buf[m++] = array[j][k];
+      }
     }
-    return m;
+  return m;
 }
 
 /* ----------------------------------------------------------------------
@@ -759,11 +770,17 @@ int FixNVEBodyAgent::pack_border(int n, int *list, double *buf)
 
 int FixNVEBodyAgent::unpack_border(int n, int first, double *buf)
 {
-    int m = 0;
-    for (int i = first; i < first + n; i++) {
-        growth_rates_all[i] = buf[m++];  // you can use ubuf() in lmptype.h to avoid compiler warnings for type conversion, but it is not needed here
+  // unpack buf into array
+  int i,last;
+  int m = 0;
+  last = first + n;
+
+  for (i = first; i < last; i++) {
+    for (int k = 0; k < size_peratom_cols; k++) {
+      array[i][k] = buf[m++];
     }
-    return m;
+  }
+  return m;
 }
 
 /* ----------------------------------------------------------------------
@@ -960,7 +977,7 @@ void FixNVEBodyAgent::write_frame()
         body2space(temp, bonus[body[i]].quat, cc);
         double *c1 = cc;
         double *c2 = cc + 3;
-        fprintf(fp, "%f %f %f %f %f %f %f %f %f %d %d %d\n", 0.8*x[i][0], 0.8*x[i][1], 0.8*x[i][2], -c1[0]/L*2, -c1[1]/L*2, -c1[2]/L*2, 0.8*L, growth_rates_all[i], birth_time_all[i], atom->type[i], atom->tag[i], mother_id[i]);
+        fprintf(fp, "%f %f %f %f %f %f %f %f %f %d %d %d\n", 0.8*x[i][0], 0.8*x[i][1], 0.8*x[i][2], -c1[0]/L*2, -c1[1]/L*2, -c1[2]/L*2, 0.8*L, array[i][0], array[i][1], atom->type[i], atom->tag[i], array[i][2]);
       }
     }
   }

@@ -57,9 +57,8 @@ class FixNVEBodyAgent : public FixNVE {
   double hc_threshold;           // R_ECM - R_cell
   double hc_scaling;             // scaling factor for hard core potential
 
-  double *growth_rates_all;      // peratom vector for growth rates
-  double *birth_time_all;
   int *mother_id;
+  double **array;                // per-atom vector for custom output   
 
   class AtomVecBody *avec;       // pointer to AtomVecBody class
   class AtomVec *avec_hybrid;    // pointer to AtomVecHybrid class if hybrid style is used, otherwise same as avec
