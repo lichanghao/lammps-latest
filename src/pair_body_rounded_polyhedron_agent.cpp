@@ -355,7 +355,8 @@ void PairBodyRoundedPolyhedronAgent::allocate()
 ------------------------------------------------------------------------- */
 
 void PairBodyRoundedPolyhedronAgent::settings(int narg, char **arg)
-{
+{ 
+  phenotypic_diff = 0.01;
   if (narg < 5) error->all(FLERR,"Illegal pair_style command");
 
   c_n = utils::numeric(FLERR,arg[0],false,lmp);
@@ -363,6 +364,10 @@ void PairBodyRoundedPolyhedronAgent::settings(int narg, char **arg)
   mu = utils::numeric(FLERR,arg[2],false,lmp);
   A_ua = utils::numeric(FLERR,arg[3],false,lmp);
   cut_inner = utils::numeric(FLERR,arg[4],false,lmp);
+
+  if (narg == 6) {
+    phenotypic_diff = utils::numeric(FLERR,arg[5],false,lmp);
+  }
 
   if (A_ua < 0) A_ua = 1;
 }
@@ -397,8 +402,8 @@ void PairBodyRoundedPolyhedronAgent::coeff(int narg, char **arg)
       count++;
       if (comm->me == 0) {
         printf("\n------------------ Pair_Body_Rounded_Polyhedron_Agent Parameters ------------------\n");
-        printf("Reading pair coefficients for types %d - %d\n: k_n = %f, k_na = %f, hard_core_scaling = %f, hard_core_threshold = %f\n", 
-             i, j, k_n[i][j], k_na[i][j], hard_core_scaling[i][j], hard_core_threshold[i][j]);
+        printf("Reading pair coefficients for types %d - %d\n: k_n = %f, k_na = %f, hard_core_scaling = %f, hard_core_threshold = %f\n, phenotypic_diff = %f\n",
+               i, j, k_n[i][j], k_na[i][j], hard_core_scaling[i][j], hard_core_threshold[i][j], phenotypic_diff);
       }
     }
   }
@@ -840,7 +845,7 @@ void PairBodyRoundedPolyhedronAgent::sphere_against_edge(int ibody, int jbody,
       vt2 = vr2 - vn2;
       vt3 = vr3 - vn3;
       
-      double friction = 0;
+      double friction = phenotypic_diff;
       if ((itype == 1 && jtype == 3) || (itype == 3 && jtype == 1)) {
         friction = 1;
         // printf("friction = %f\n", friction);

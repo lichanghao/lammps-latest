@@ -15,7 +15,7 @@
 /* ----------------------------------------------------------------------
    Agent-based simulation for bacteria biofilms
    Author: Changhao Li (changhaoli1997@gmail.com)
-   Last updated: 02/26/2025
+   Last updated: 04/24/2025
 ------------------------------------------------------------------------- */
 
 #include <cmath>
@@ -53,14 +53,14 @@ FixNVEBodyAgent::FixNVEBodyAgent(LAMMPS *lmp, int narg, char **arg) :
 { 
   // set fix parent class tags, indicating this fix creates a scalar array per atom
   peratom_flag = 1;
-  size_peratom_cols = 3;
+  size_peratom_cols = 3;  // number of custom per-atom columns
   peratom_freq = 1;
   time_integrate = 1;
 
   // read parameters from input files
   read_params(narg, arg);
 
-  // random generator (seed = current time + processor_id)
+  // LAMMPS built-in random generator (seed = current time + processor_id)
   if (random_seed == 0) {
     random_seed = static_cast<int> (time(NULL)); // if random seed is not given, use the current time
   }
@@ -83,13 +83,12 @@ FixNVEBodyAgent::FixNVEBodyAgent(LAMMPS *lmp, int narg, char **arg) :
   atom->add_callback(Atom::GROW);
   atom->add_callback(Atom::BORDER);
   
-  // initiate the image flag for all atoms as 0, because somehow the original body package did not do it
+  // initiate the image flag for all atoms as 0, preventing segmentation fault
   for (int i = 0; i < nlocal; i++) atom->image[i] = 0;
 
-  // find maximum id across all processors
+  // find maximum id across all processors (it works but may introduce deadlock if call find_maxid() during time integration)
   maxtag_all = 1E5;
-  find_maxid();
-  // printf("maxid = %d\n", maxtag_all);
+  find_maxid(); // don't call this function during time integration
 }
 
 /* ---------------------------------------------------------------------- */
@@ -104,6 +103,7 @@ void FixNVEBodyAgent::init()
   avec_hybrid = dynamic_cast<AtomVec *>(atom->style_match("hybrid"));
   if (!avec) avec_hybrid = avec;
 
+  // tell LAMMPS the next reneighboring timestep, important for update neighbor lists after cell division 
   force_reneighbor = 1;
   next_reneighbor = update->ntimestep + 1;
 
@@ -116,8 +116,7 @@ void FixNVEBodyAgent::init()
     if (mask[i] & groupbit)
       if (body[i] < 0) error->one(FLERR,"Fix nve/body/agent requires bodies");
 
-
-  // custom output file, only work for single processor test
+  // custom output file, only works for single processor test
   const char *filename = "center.dump";
   if (comm->me == 0) {
     fp = fopen(filename, "w");
@@ -151,6 +150,7 @@ int FixNVEBodyAgent::setmask()
 
 /* ---------------------------------------------------------------------- 
   do the first half of verlet integration, apply damping and noise
+  TODO: other time integration methods?
 ---------------------------------------------------------------------- */
 
 void FixNVEBodyAgent::initial_integrate(int /*vflag*/)
@@ -198,11 +198,13 @@ void FixNVEBodyAgent::initial_integrate(int /*vflag*/)
       add_noise(f[i], torque[i], noise_level);
 
       // at the beginning, assign all cell types = 1
+      // I did this because the code cannot properly handle the initial condition if there is only one cell type
+      // need to have all types of cell in the initial configuration
       if (update->ntimestep == 1) {
         if (type[i] == 2) type[i] = 1;
       }
 
-      // assign mutant type
+      // phenotype switching
       double probability_HL = kHL;
       double probability_LH = kLH;
       if (type[i] == 1) {
@@ -236,6 +238,7 @@ void FixNVEBodyAgent::initial_integrate(int /*vflag*/)
       MathExtra::richardson(quat, angmom[i], omega, inertia, dtq);
     }
 
+    // set the next timestep for reneighboring
     determine_next_reneighbor();
 }
 
@@ -253,6 +256,7 @@ void FixNVEBodyAgent::pre_exchange()
   if (next_reneighbor != update->ntimestep) return;
 
   // clear atom maps and ghost atom information
+  // this is important for preventing segmentation fault
   if (atom->map_style != Atom::MAP_NONE) atom->map_clear();
   atom->nghost = 0;
   atom->avec->clear_bonus();
@@ -270,6 +274,7 @@ void FixNVEBodyAgent::pre_exchange()
   }
   
   // rebuild atom maps
+  // this is important for preventing segmentation fault
   if (atom->map_style != Atom::MAP_NONE) {
     atom->map_init(1);
     atom->map_set();

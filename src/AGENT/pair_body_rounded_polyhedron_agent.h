@@ -61,6 +61,7 @@ class PairBodyRoundedPolyhedronAgent : public Pair {
   double mu;           // normal friction coefficient during gross sliding
   double A_ua;         // characteristic contact area
   double cut_inner;    // cutoff for interaction between vertex-edge surfaces
+  double phenotypic_diff; // ratio of differential adhesion and differential friction
 
   class AtomVecBody *avec;
   class BodyRoundedPolyhedronAgent *bptr;
